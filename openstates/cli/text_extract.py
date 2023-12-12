@@ -20,7 +20,7 @@ from openstates.fulltext import (
     CONVERSION_FUNCTIONS,
     Metadata,
 )
-from ..utils.instrument import Instrumentation
+from ..civiqa.instrument import Instrumentation
 
 stats = Instrumentation()
 # disable SSL validation and ignore warnings

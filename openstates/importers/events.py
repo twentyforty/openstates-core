@@ -36,6 +36,10 @@ class EventImporter(BaseImporter):
         ),
     }
     preserve_order = {"agenda"}
+    merge_related = {
+        "documents": ["note", "date"],
+        "media": ["note", "date"],
+    }
 
     def __init__(
         self,

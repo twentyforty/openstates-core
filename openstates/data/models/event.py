@@ -14,6 +14,7 @@ from ..common import (
     EVENT_DOCUMENT_CLASSIFICATION_CHOICES,
 )
 
+
 EVENT_STATUS_CHOICES = (
     ("cancelled", "Cancelled"),
     ("tentative", "Tentative"),
@@ -32,7 +33,7 @@ class EventMediaBase(RelatedBase):
 
 
 class EventLocation(RelatedBase):
-    name = models.CharField(max_length=200)
+    name = models.CharField(max_length=2000)
     url = models.URLField(blank=True, max_length=2000)
     jurisdiction = models.ForeignKey(
         Jurisdiction, related_name="event_locations", on_delete=models.CASCADE

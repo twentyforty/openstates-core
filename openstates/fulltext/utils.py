@@ -5,13 +5,13 @@ import subprocess
 from lxml import html  # type: ignore
 
 
-def pdfdata_to_text(data: bytes) -> str:
+def pdfdata_to_text(data: bytes, params=[]) -> str:
     with tempfile.NamedTemporaryFile(delete=True) as tmpf:
         tmpf.write(data)
         tmpf.flush()
         try:
             pipe = subprocess.Popen(
-                ["pdftotext", "-layout", tmpf.name, "-"],
+                ["pdftotext", "-layout", tmpf.name, "-", *params],
                 stdout=subprocess.PIPE,
                 close_fds=True,
             ).stdout
@@ -35,7 +35,7 @@ def clean(text: str) -> str:
 
 
 def _text_near_line_numbers(lines: str, regex: str) -> str:
-    """ used for before & after line numbers """
+    """used for before & after line numbers"""
     text = []
     for line in lines.splitlines():
         # real bill text starts with an optional space, line number,

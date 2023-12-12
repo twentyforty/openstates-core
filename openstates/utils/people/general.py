@@ -51,7 +51,12 @@ def get_data_path(abbr: str) -> Path:
 
 
 def get_all_abbreviations() -> list[str]:
-    return sorted(x.name for x in (get_base_path() / "data").iterdir())
+    abbr_to_exclude = ["pr"]
+    return sorted(
+        x.name
+        for x in (get_base_path() / "data").iterdir()
+        if x.name not in abbr_to_exclude
+    )
 
 
 def dump_obj(
@@ -86,7 +91,7 @@ def get_new_filename(obj: dict) -> str:
 def legacy_districts(
     abbr: typing.Optional[str] = None, jurisdiction_id: typing.Optional[str] = None
 ) -> dict[str, list[str]]:
-    """ can take jurisdiction_id or abbr via kwargs """
+    """can take jurisdiction_id or abbr via kwargs"""
     legacy_districts: dict[str, list[str]] = {"upper": [], "lower": []}
     for d in metadata.lookup(
         abbr=abbr, jurisdiction_id=jurisdiction_id

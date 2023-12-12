@@ -18,10 +18,8 @@ class PostInline(admin.TabularInline):
     can_delete = False
 
     def get_label(self, post):
-        admin_url = reverse(
-            "admin:data_post_change", args=(post.pk,)
-        )
-        tmpl = u'<a href="%s">%s</a>'
+        admin_url = reverse("admin:data_post_change", args=(post.pk,))
+        tmpl = '<a href="%s">%s</a>'
         return format_html(tmpl % (admin_url, post.label))
 
     get_label.short_description = "Label"
@@ -38,10 +36,8 @@ class OrganizationInline(ReadOnlyTabularInline):
     ordering = ("-classification", "name")
 
     def get_name(self, organization):
-        admin_url = reverse(
-            "admin:data_organization_change", args=(organization.pk,)
-        )
-        tmpl = u'<a href="%s">%s</a>'
+        admin_url = reverse("admin:data_organization_change", args=(organization.pk,))
+        tmpl = '<a href="%s">%s</a>'
         return format_html(tmpl % (admin_url, organization.name))
 
     get_name.short_description = "ID"
@@ -52,16 +48,26 @@ class OrganizationInline(ReadOnlyTabularInline):
 class OrgMembershipInline(ReadOnlyTabularInline):
     model = models.Membership
     fk_name = "organization"
-    readonly_fields = ("id", "person", "post", "role", "start_date")
-    fields = readonly_fields + ("end_date",)
+    readonly_fields = ("id", "person", "post")
+    fields = readonly_fields + ("role", "start_date", "end_date")
     extra = 0
-    can_delete = False
+    can_delete = True
     ordering = ("person__name", "start_date")
 
 
 @admin.register(models.Post)
 class PostAdmin(ModelAdmin):
-    readonly_fields = fields = ("id", "division", "organization", "label", "role", "maximum_memberships", "extras")
+    search_fields = ("role", "label", "organization__name", "division__name")
+    readonly_fields = ("id",)
+    fields = (
+        "division",
+        "organization",
+        "label",
+        "role",
+        "maximum_memberships",
+        "extras",
+    )
+    autocomplete_fields = ("division", "organization")
     ordering = ("division__id", "organization", "role", "label")
     inlines = (MembershipInline,)
     list_display = ("division", "organization", "role", "label")
@@ -69,18 +75,16 @@ class PostAdmin(ModelAdmin):
 
 @admin.register(models.Organization)
 class OrganizationAdmin(ModelAdmin):
-    readonly_fields = (
-        "id",
+    readonly_fields = ("id",)
+    fields = (
         "name",
         "classification",
         "parent",
         "jurisdiction",
         "extras",
     )
-    fields = readonly_fields
-    search_fields = ("name",)
-    list_filter = ("jurisdiction__name",)
-
+    search_fields = ("id", "name", "jurisdiction__name")
+    autocomplete_fields = ("parent", "jurisdiction")
     inlines = [
         PostInline,
         OrgMembershipInline,

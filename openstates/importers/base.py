@@ -11,8 +11,9 @@ from ..data.models import LegislativeSession, Person, Bill
 from ..exceptions import DuplicateItemError, UnresolvedIdError, DataImportError
 from ..utils import get_pseudo_id, utcnow
 from ._types import _ID, _JsonDict, _RelatedModels, _TransformerMapping
+import concurrent
 
-_PersonCacheKey = typing.Tuple[str, typing.Optional[str], typing.Optional[str]]
+_PersonCacheKey = tuple[str, typing.Optional[str], typing.Optional[str]]
 
 
 def omnihash(obj: typing.Any) -> int:
@@ -31,7 +32,7 @@ def _match(
     dbitem: Model,
     jsonitem: _JsonDict,
     keys: typing.Iterable[str],
-    subfield_dict: typing.Dict[str, typing.Any],
+    subfield_dict: dict[str, typing.Any],
 ) -> bool:
     # check if all keys (excluding subfields) match
     for k in keys:
@@ -50,8 +51,8 @@ def _match(
 
 
 def items_differ(
-    jsonitems: typing.List[_JsonDict],
-    dbitems: typing.List[Model],
+    jsonitems: list[_JsonDict],
+    dbitems: list[Model],
     subfield_dict: _JsonDict,
 ) -> bool:
     """check whether or not jsonitems and dbitems differ"""
@@ -85,6 +86,7 @@ def items_differ(
         for i, jsonitem in enumerate(jsonitems):
             if _match(dbitem, jsonitem, keys, subfield_dict):
                 match = i
+                break
 
         if match is not None:
             # item exists in both, remove from jsonitems
@@ -115,18 +117,18 @@ class BaseImporter:
     _type: str
     model_class: Model = None
     related_models: _RelatedModels = {}
-    preserve_order: typing.Set[str] = set()
-    merge_related: typing.Dict[str, typing.List[str]] = {}
+    preserve_order: set[str] = set()
+    merge_related: dict[str, list[str]] = {}
     cached_transformers: _TransformerMapping = {}
 
     def __init__(self, jurisdiction_id: str, do_postimport=True) -> None:
         self.jurisdiction_id = jurisdiction_id
         self.do_postimport = do_postimport
-        self.json_to_db_id: typing.Dict[str, _ID] = {}
-        self.duplicates: typing.Dict[str, str] = {}
-        self.pseudo_id_cache: typing.Dict[str, typing.Optional[_ID]] = {}
-        self.person_cache: typing.Dict[_PersonCacheKey, typing.Optional[str]] = {}
-        self.session_cache: typing.Dict[str, LegislativeSession] = {}
+        self.json_to_db_id: dict[str, _ID] = {}
+        self.duplicates: dict[str, str] = {}
+        self.pseudo_id_cache: dict[str, typing.Optional[_ID]] = {}
+        self.person_cache: dict[_PersonCacheKey, typing.Optional[str]] = {}
+        self.session_cache: dict[str, LegislativeSession] = {}
         self.logger = logging.getLogger("openstates")
         self.info = self.logger.info
         self.debug = self.logger.debug
@@ -138,12 +140,12 @@ class BaseImporter:
         if settings.IMPORT_TRANSFORMERS.get(self._type):
             self.cached_transformers = settings.IMPORT_TRANSFORMERS[self._type]
 
-    def get_session(self, identifier: str) -> LegislativeSession:
-        if identifier not in self.session_cache:
-            self.session_cache[identifier] = LegislativeSession.objects.get(
-                identifier=identifier, jurisdiction_id=self.jurisdiction_id
+    def get_session(self, legislative_session_id: str) -> LegislativeSession:
+        if legislative_session_id not in self.session_cache:
+            self.session_cache[legislative_session_id] = LegislativeSession.objects.get(
+                id=legislative_session_id, jurisdiction_id=self.jurisdiction_id
             )
-        return self.session_cache[identifier]
+        return self.session_cache[legislative_session_id]
 
     def limit_spec(self, spec: _JsonDict) -> _JsonDict:
         raise NotImplementedError()
@@ -248,12 +250,18 @@ class BaseImporter:
         except KeyError:
             raise UnresolvedIdError("cannot resolve id: {}".format(json_id))
 
-    def import_directory(self, datadir: str) -> typing.Dict[str, typing.Dict]:
+    def import_directory(self, datadir: str) -> dict[str, typing.Dict]:
         """import a JSON directory into the database"""
 
         def json_stream() -> typing.Iterator[_JsonDict]:
             # load all json, mapped by json_id
-            for fname in glob.glob(os.path.join(datadir, self._type + "_*.json")):
+            files = glob.glob(os.path.join(datadir, self._type + "_*.json"))
+
+            count = len(files)
+            for index, fname in enumerate(
+                glob.glob(os.path.join(datadir, self._type + "_*.json"))
+            ):
+                print(f"loading {index} of {count} {fname}")
                 with open(fname) as f:
                     yield json.load(f)
 
@@ -261,7 +269,7 @@ class BaseImporter:
 
     def _prepare_imports(
         self, dicts: typing.Iterable[_JsonDict]
-    ) -> typing.Iterator[typing.Tuple[str, _JsonDict]]:
+    ) -> typing.Iterator[tuple[str, _JsonDict]]:
         """filters the import stream to remove duplicates
 
         also serves as a good place to override if anything special has to be done to the
@@ -269,7 +277,6 @@ class BaseImporter:
         """
         # hash(json): id
         seen_hashes = {}
-
         for data in dicts:
             json_id = data.pop("_id")
             if self._type == "vote_event":
@@ -285,7 +292,7 @@ class BaseImporter:
 
     def import_data(
         self, data_items: typing.Iterable[_JsonDict]
-    ) -> typing.Dict[str, typing.Dict]:
+    ) -> dict[str, typing.Dict]:
         """import a bunch of dicts together"""
         # keep counts of all actions
         record = {
@@ -296,14 +303,20 @@ class BaseImporter:
             "records": {"insert": [], "update": [], "noop": []},
         }
 
-        for json_id, data in self._prepare_imports(data_items):
-            obj_id, what = self.import_item(data)
-            if not obj_id or not what:
-                "Skipping data because it did not have an associated ID or type"
-                continue
-            self.json_to_db_id[json_id] = obj_id
-            record["records"][what].append(obj_id)
-            record[what] += 1
+        futures = []
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+            imports = self._prepare_imports(data_items)
+            for index, (json_id, data) in enumerate(imports):
+                futures.append(executor.submit(self.import_item, data, json_id, index))
+
+            for future in concurrent.futures.as_completed(futures):
+                obj_id, what, json_id = future.result()
+                if not obj_id or not what:
+                    "Skipping data because it did not have an associated ID or type"
+                    continue
+                self.json_to_db_id[json_id] = obj_id
+                record["records"][what].append(obj_id)
+                record[what] += 1
 
         # all objects are loaded, a perfect time to do inter-object resolution and other tasks
         if self.json_to_db_id and self.do_postimport:
@@ -316,7 +329,8 @@ class BaseImporter:
 
         return {self._type: record}
 
-    def import_item(self, data: _JsonDict) -> typing.Tuple[_ID, str]:
+    def import_item(self, data: _JsonDict, json_id, print_index) -> tuple[_ID, str]:
+        print(f"importing {print_index} {json_id}")
         """function used by import_data"""
         what = "noop"
 
@@ -329,8 +343,9 @@ class BaseImporter:
         data = self.apply_transformers(data)
         try:
             data = self.prepare_for_db(data)
-        except UnresolvedIdError:
-            return None, what
+        except UnresolvedIdError as e:
+            print(e)
+            return None, what, json_id
 
         try:
             obj = self.get_object(data)
@@ -352,7 +367,8 @@ class BaseImporter:
                     setattr(obj, key, value)
                     what = "update"
 
-            updated = self._update_related(obj, related, self.related_models)
+            updated_fields = self._update_related(obj, related, self.related_models)
+            updated = len(updated_fields) > 0
             if updated:
                 what = "update"
 
@@ -380,14 +396,14 @@ class BaseImporter:
             # for handlers make use of related objects
             post_save.send(sender=self.model_class, instance=obj, created=True)
 
-        return obj.id, what
+        return obj.id, what, json_id
 
     def _update_related(
         self,
         obj: Model,
-        related: typing.Dict[str, typing.List[Model]],
+        related: dict[str, list[Model]],
         subfield_dict: _JsonDict,
-    ) -> bool:
+    ) -> list[str]:
         """
         update DB objects related to a base object
             obj:            a base object to create related
@@ -395,29 +411,17 @@ class BaseImporter:
             subfield_list:  where to get the next layer of subfields
         """
         # keep track of whether or not anything was updated
-        updated = False
-
+        updated_fields = []
         # for each related field - check if there are differences
         for field, items in related.items():
             # get items from database
             dbitems = list(getattr(obj, field).all())
             dbitems_count = len(dbitems)
 
-            # default to doing nothing
-            do_delete = do_update = False
-
-            if items and dbitems_count:  # we have items, so does db, check for conflict
-                do_delete = do_update = items_differ(
-                    items, dbitems, subfield_dict[field][2]
-                )
-            elif items and not dbitems_count:  # we have items, db doesn't, just update
-                do_update = True
-            elif not items and dbitems_count:  # db has items, we don't, just delete
-                do_delete = True
-            # otherwise: no items or dbitems, so nothing is done
+            do_items_differ = items_differ(items, dbitems, subfield_dict[field][2])
 
             # don't delete if field is in merge_related
-            if field in self.merge_related:
+            if do_items_differ and field in self.merge_related:
                 new_items = []
                 # build a list of keyfields to existing database objects
                 keylist = self.merge_related[field]
@@ -430,34 +434,69 @@ class BaseImporter:
                 #       update the database item w/ the new item's properties
                 #   else:
                 #       add it to new_items
-                for item in items:
+                for order, item in enumerate(items):
                     key = tuple(item.get(k) for k in keylist)
                     dbitem = keyed_dbitems.get(key)
                     if not dbitem:
+                        if field in self.preserve_order:
+                            item["order"] = order
                         new_items.append(item)
                     else:
                         # update dbitem
+                        subsubfield_dict = subfield_dict.get(field)
                         for fname, val in item.items():
-                            setattr(dbitem, fname, val)
-                        dbitem.save()
+                            if subsubfield_dict and subsubfield_dict[2].get(fname):
+                                # if field has related items
+                                updated_fields.extend(
+                                    self._update_related(
+                                        dbitem, {fname: val}, subsubfield_dict[2]
+                                    )
+                                )
+                            else:
+                                if getattr(dbitem, fname) != val:
+                                    setattr(dbitem, fname, val)
+                                    updated_fields.append(fname)
+                                    dbitem.save()
+                        if field in self.preserve_order and dbitem.order != order:
+                            updated_fields.append(
+                                "order (from {} to {})".format(dbitem.order, order)
+                            )
+                            dbitem.order = order
+                            dbitem.save()
 
-                # import anything that made it to new_items in the usual fashion
-                self._create_related(obj, {field: new_items}, subfield_dict)
+                if new_items:
+                    self._create_related(obj, {field: new_items}, subfield_dict)
+                    updated_fields.append(f"  new {field} items: {len(new_items)}")
             else:
+                # default to doing nothing
+                do_delete = do_update = False
+
+                if (
+                    items and dbitems_count
+                ):  # we have items, so does db, check for conflict
+                    do_delete = do_update = do_items_differ
+                elif (
+                    items and not dbitems_count
+                ):  # we have items, db doesn't, just update
+                    do_update = True
+                elif not items and dbitems_count:  # db has items, we don't, just delete
+                    do_delete = True
+                # otherwise: no items or dbitems, so nothing is done
+
                 # default logic is to just wipe and recreate subobjects
                 if do_delete:
-                    updated = True
+                    updated_fields.append(field)
                     getattr(obj, field).all().delete()
                 if do_update:
-                    updated = True
+                    updated_fields.append(field)
                     self._create_related(obj, {field: items}, subfield_dict)
 
-        return updated
+        return updated_fields
 
     def _create_related(
         self,
         obj: Model,
-        related: typing.Dict[str, typing.List[Model]],
+        related: dict[str, list[Model]],
         subfield_dict: _JsonDict,
     ) -> None:
         """
@@ -520,7 +559,7 @@ class BaseImporter:
 
         return data
 
-    def get_seen_sessions(self) -> typing.List[str]:
+    def get_seen_sessions(self) -> list[str]:
         return [s.id for s in self.session_cache.values()]
 
     def resolve_person(

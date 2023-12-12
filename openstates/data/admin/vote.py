@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .base import ModelAdmin, ReadOnlyTabularInline
+from .base import ReadOnlyModelAdmin, ReadOnlyTabularInline
 from .. import models
 
 
@@ -19,7 +19,7 @@ class VoteSourceInline(ReadOnlyTabularInline):
 
 
 @admin.register(models.VoteEvent)
-class VoteEventAdmin(ModelAdmin):
+class VoteEventAdmin(ReadOnlyModelAdmin):
     readonly_fields = (
         "bill",
         "organization",
@@ -61,7 +61,5 @@ class VoteEventAdmin(ModelAdmin):
     get_vote_tally.short_description = "Vote Tally"
 
     list_display = ("get_jurisdiction_name", "identifier", "bill", "get_vote_tally")
-
-    list_filter = ("legislative_session__jurisdiction__name",)
 
     inlines = [VoteCountInline, PersonVoteInline, VoteSourceInline]

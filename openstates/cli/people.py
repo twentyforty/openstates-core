@@ -31,7 +31,7 @@ from ..utils.people.to_database import (
     CancelTransaction,
 )
 from ..utils.people.merge import process_scrape_dir, incoming_merge
-from ..utils.instrument import Instrumentation
+from ..civiqa.instrument import Instrumentation
 
 stats = Instrumentation()
 

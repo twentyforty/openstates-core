@@ -47,7 +47,6 @@ class RunPlanAdmin(admin.ModelAdmin):
         "exception",
         "traceback",
     )
-    list_filter = ("jurisdiction__name", "success")
     list_display = ("jurisdiction", "success", "start_time")
     inlines = [ScrapeReportInline, ImportObjectsInline]
 
@@ -88,7 +87,6 @@ class SessionDataQualityAdmin(admin.ModelAdmin):
         "votes_missing_no_count",
         "votes_with_bad_counts",
     )
-    list_filter = ("legislative_session__jurisdiction__name",)
 
     def jurisdiction_name(self, obj):
         return obj.legislative_session.jurisdiction.name

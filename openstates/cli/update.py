@@ -7,6 +7,7 @@ import inspect
 import logging
 import logging.config
 import os
+import signal
 import sys
 import time
 import traceback
@@ -14,14 +15,17 @@ import typing
 from collections import defaultdict
 from types import ModuleType
 
-from django.db import transaction  # type: ignore
+from django.db import transaction
+
+from openstates.civiqa.publisher import publish_os_update_finished  # type: ignore
 
 from .. import settings, utils
 from ..exceptions import CommandError
 from ..scrape import JurisdictionScraper, State
 from ..utils.django import init_django
-from ..utils.instrument import Instrumentation
+from ..civiqa.instrument import Instrumentation
 from .reports import generate_session_report, print_report, save_report
+from ..civiqa.civiqa_env import load_civiqa_env
 
 logger = logging.getLogger("openstates")
 stats = Instrumentation()
@@ -295,13 +299,14 @@ def do_update(
         raise CommandError("no scrapers defined on jurisdiction")
 
     if other:
-        # parse arg list in format: (scraper (k:v)+)+
+        # parse arg list in format: (scraper (k=v)+)+
         cur_scraper = None
         for arg in other:
             if "=" in arg:
                 if not cur_scraper:
                     raise CommandError("argument {} before scraper name".format(arg))
                 k, v = arg.split("=", 1)
+                v.strip(" '")
                 scrapers[cur_scraper][k] = v
             elif arg in juris.scrapers:
                 cur_scraper = arg
@@ -381,7 +386,7 @@ def do_update(
         report["exception"] = exc
         report["traceback"] = traceback.format_exc()
         if "import" in args.actions:
-            save_report(report, juris.jurisdiction_id)
+            run_plan = save_report(report, juris.jurisdiction_id)
         raise
     else:
         finish = utils.utcnow()
@@ -431,9 +436,10 @@ def do_update(
                 )
 
         if "import" in args.actions:
-            save_report(report, juris.jurisdiction_id)
+            run_plan = save_report(report, juris.jurisdiction_id)
 
         print_report(report)
+        publish_os_update_finished(run_plan)
         return report
 
 
@@ -506,11 +512,11 @@ def parse_args() -> tuple[argparse.Namespace, list[str]]:
 def main() -> int:
     args, other = parse_args()
 
+    load_civiqa_env()
     # set log level from command line
-    handler_level = getattr(logging, args.loglevel.upper(), "INFO")
-    settings.LOGGING["handlers"]["default"]["level"] = handler_level  # type: ignore
-    logging.config.dictConfig(settings.LOGGING)
-    stats.logger.setLevel(handler_level)
+    # handler_level = getattr(logging, args.loglevel.upper(), "INFO")
+    # settings.LOGGING["handlers"]["default"]["level"] = handler_level  # type: ignore
+    # stats.logger.setLevel(handler_level)
 
     # turn debug on
     if args.debug:
@@ -541,11 +547,20 @@ def main() -> int:
         report = do_update(args, other, juris)
 
     stats.close()
+
+    publish_os_update_finished
     if report.get("success", False):
         return 0
     else:
         return 1
 
 
+def shutdown_handler(signal: int, _) -> None:
+    logger.info("Signal received, safely shutting down.")
+    print("Exiting process.", flush=True)
+    sys.exit(0)
+
+
 if __name__ == "__main__":
+    signal.signal(signal.SIGINT, shutdown_handler)
     sys.exit(main())

@@ -5,7 +5,6 @@ from .base import OCDBase, LinkBase, OCDIDField, RelatedBase, IdentifierBase
 from .division import Division
 from .jurisdiction import Jurisdiction
 from .. import common
-from ...utils import abbr_to_jid
 
 
 # the actual models
@@ -113,11 +112,15 @@ class Post(OCDBase):
         index_together = [["organization", "label"]]
 
     def __str__(self):
-        return "{} - {} - {}".format(self.role, self.label, self.organization)
+        return "{} - {} - {}".format(
+            self.role, self.label, self.organization, self.division.name
+        )
 
 
 class PersonQuerySet(QuerySet):
-    def member_of(self, organization_name, current_only=True, post=None):
+    def member_of(
+        self, organization_name, current_only=True, post=None, division_id=None
+    ):
         if organization_name.startswith("ocd-organization/"):
             org_filter = Q(memberships__organization_id=organization_name)
         else:
@@ -132,6 +135,8 @@ class PersonQuerySet(QuerySet):
             ) & Q(memberships__end_date="") | Q(memberships__end_date__gte=today)
         if post:
             org_filter &= Q(memberships__post__label=post)
+        if division_id:
+            org_filter &= Q(memberships__post__division_id=division_id)
         return qs.filter(org_filter).distinct()
 
     def active(self):
@@ -153,10 +158,6 @@ class PersonQuerySet(QuerySet):
         else:
             people = self.filter(name__icontains=query)
 
-        if state:
-            people = people.filter(
-                memberships__organization__jurisdiction_id=abbr_to_jid(state)
-            )
         return people
 
 
@@ -381,6 +382,7 @@ class Membership(OCDBase):
         Post,
         related_name="memberships",
         null=True,
+        blank=True,
         # Membership will just unlink if the post goes away
         on_delete=models.SET_NULL,
         help_text="	The Post held by the member in the Organization.",

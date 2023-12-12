@@ -4,7 +4,7 @@ from django.utils.html import format_html
 from openstates.data.admin.organization import OrganizationInline
 
 from .. import models
-from .base import ModelAdmin, ReadOnlyTabularInline
+from .base import ModelAdmin, ReadOnlyModelAdmin, ReadOnlyTabularInline
 
 
 class JurisdictionInline(ReadOnlyTabularInline):
@@ -20,10 +20,8 @@ class JurisdictionInline(ReadOnlyTabularInline):
     ordering = ("id",)
 
     def get_id(self, jurisdiction):
-        admin_url = reverse(
-            "admin:data_jurisdiction_change", args=(jurisdiction.pk,)
-        )
-        tmpl = u'<a href="%s">%s</a>'
+        admin_url = reverse("admin:data_jurisdiction_change", args=(jurisdiction.pk,))
+        tmpl = '<a href="%s">%s</a>'
         return format_html(tmpl % (admin_url, jurisdiction.name))
 
     get_id.short_description = "ID"
@@ -35,14 +33,21 @@ class JurisdictionInline(ReadOnlyTabularInline):
 class DivisionAdmin(ModelAdmin):
     list_display = ("name", "id")
     search_fields = list_display
-    fields = readonly_fields = ("id", "name", "redirect", "country")
+    fields = ("id", "name", "redirect", "country")
     ordering = ("id",)
     inlines = [JurisdictionInline]
+    autocomplete_fields = ("redirect",)
 
 
 class LegislativeSessionInline(ReadOnlyTabularInline):
     model = models.LegislativeSession
-    readonly_fields = ("identifier", "get_name", "classification", "start_date", "end_date")
+    readonly_fields = (
+        "identifier",
+        "get_name",
+        "classification",
+        "start_date",
+        "end_date",
+    )
     fields = readonly_fields
     ordering = ("-identifier",)
 
@@ -50,7 +55,7 @@ class LegislativeSessionInline(ReadOnlyTabularInline):
         admin_url = reverse(
             "admin:data_legislativesession_change", args=(legislative_session.pk,)
         )
-        tmpl = u'<a href="%s">%s</a>'
+        tmpl = '<a href="%s">%s</a>'
         return format_html(tmpl % (admin_url, legislative_session.name))
 
     get_name.short_description = "NAME"
@@ -70,23 +75,34 @@ class BillInline(ReadOnlyTabularInline):
     ordering = ("identifier",)
 
     def get_identifier(self, bill):
-        admin_url = reverse(
-            "admin:data_bill_change", args=(bill.id,)
-        )
-        tmpl = u'<a href="%s">%s</a>'
+        admin_url = reverse("admin:data_bill_change", args=(bill.id,))
+        tmpl = '<a href="%s">%s</a>'
         return format_html(tmpl % (admin_url, bill.identifier))
 
 
 @admin.register(models.LegislativeSession)
-class LegislativeSessionAdmin(ModelAdmin):
-    readonly_fields = ("jurisdiction", "identifier", "name", "active", "classification", "start_date", "end_date")
+class LegislativeSessionAdmin(ReadOnlyModelAdmin):
+    search_fields = (
+        "jurisdiction__name",
+        "identifier",
+    )
+    readonly_fields = (
+        "jurisdiction",
+        "identifier",
+        "name",
+        "active",
+        "classification",
+        "start_date",
+        "end_date",
+    )
     inlines = [BillInline]
+    list_display = ("identifier", "name", "jurisdiction")
 
 
 @admin.register(models.Jurisdiction)
 class JurisdictionAdmin(ModelAdmin):
     list_display = ("name", "id", "classification")
-    readonly_fields = fields = (
+    fields = (
         "id",
         "name",
         "division",
@@ -94,6 +110,10 @@ class JurisdictionAdmin(ModelAdmin):
         "extras",
         "url",
     )
-    ordering = ("-classification", "id",)
+    ordering = (
+        "-classification",
+        "id",
+    )
     search_fields = ("id", "name")
+    autocomplete_fields = ("division",)
     inlines = [LegislativeSessionInline, OrganizationInline]

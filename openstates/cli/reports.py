@@ -1,7 +1,9 @@
 import typing
 import logging
 from django.db import transaction  # type: ignore
-from django.db.models import Count, Subquery, OuterRef, Q, F  # type: ignore
+from django.db.models import Count, Subquery, OuterRef, Q, F
+
+from openstates.data.models.reports import RunPlan  # type: ignore
 from .. import utils
 
 # model imports are inside functions since this file is imported pre-init
@@ -33,7 +35,7 @@ def print_report(report: dict[str, typing.Any]) -> None:
 
 
 @transaction.atomic
-def save_report(report: dict[str, typing.Any], jurisdiction: str) -> typing.Any:
+def save_report(report: dict[str, typing.Any], jurisdiction: str) -> RunPlan:
     from ..data.models import Jurisdiction, RunPlan
 
     # set end time
@@ -82,7 +84,9 @@ def save_report(report: dict[str, typing.Any], jurisdiction: str) -> typing.Any:
                 noop_count=changes["noop"],
                 start_time=changes["start"],
                 end_time=changes["end"],
+                records=changes["records"],
             )
+    return plan
 
 
 def _simple_count(ModelCls: typing.Any, session: str, **filter: typing.Any) -> int:

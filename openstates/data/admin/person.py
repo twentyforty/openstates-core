@@ -18,48 +18,58 @@ class PersonNameInline(OtherNameInline):
     model = models.PersonName
 
 
-class PersonOfficeInline(ReadOnlyTabularInline):
-    readonly_fields = ("classification", "address", "voice", "fax", "name")
+class PersonOfficeInline(admin.TabularInline):
+    fields = ("classification", "address", "voice", "fax", "name")
     model = models.PersonOffice
 
 
-class PersonLinkInline(ReadOnlyTabularInline):
-    readonly_fields = ("url", "note")
+class PersonLinkInline(admin.TabularInline):
+    fields = ("url", "note")
     model = models.PersonLink
 
 
-class PersonSourceInline(ReadOnlyTabularInline):
-    readonly_fields = ("url", "note")
+class PersonSourceInline(admin.TabularInline):
+    fields = ("url", "note")
     model = models.PersonSource
 
 
-class MembershipInline(ReadOnlyTabularInline):
+class MembershipInline(admin.TabularInline):
     model = models.Membership
-    readonly_fields = ("organization", "person", "post", "role", "start_date")
-    fields = ("id",) + readonly_fields + ("end_date",)
+    autocomplete_fields = ("organization", "person", "post")
+    fields = (
+        ("id",)
+        + autocomplete_fields
+        + (
+            "role",
+            "start_date",
+            "end_date",
+        )
+    )
     exclude = ("id",)
     extra = 0
-    can_delete = False
+    can_delete = True
     ordering = ("end_date",)
 
 
 # TODO field locking
 @admin.register(models.Person)
 class PersonAdmin(ModelAdmin):
-    search_fields = ["name"]
-    readonly_fields = ("id", "name", "extras")
-    fields = (
-        "name",
+    search_fields = ("id", "name", "current_jurisdiction__name")
+    readonly_fields = (
         "id",
+        "name",
+        "extras",
         "image",
+    )
+    fields = (
+        "id",
+        "name",
         ("birth_date", "death_date"),
         "gender",
         "biography",
         "extras",
     )
     ordering = ("name",)
-    list_filter = ("memberships__organization__jurisdiction__name",)
-
     inlines = [
         PersonIdentifierInline,
         PersonNameInline,
@@ -68,32 +78,31 @@ class PersonAdmin(ModelAdmin):
         PersonSourceInline,
         MembershipInline,
     ]
+    list_display = ("name", "id", "current_jurisdiction")
 
-    def get_memberships(self, obj):
-        memberships = obj.memberships.select_related("organization__jurisdiction")
-        html = []
-        SHOW_N = 5
-        for memb in memberships[:SHOW_N]:
-            org = memb.organization
-            admin_url = reverse("admin:data_organization_change", args=(org.pk,))
-            tmpl = '<a href="%s">%s%s</a>\n'
-            html.append(
-                tmpl
-                % (
-                    admin_url,
-                    (
-                        memb.organization.jurisdiction.name + ": "
-                        if memb.organization.jurisdiction
-                        else ""
-                    ),
-                    memb.organization.name,
-                )
-            )
-        more = len(memberships) - SHOW_N
-        if 0 < more:
-            html.append("And %d more" % more)
-        return mark_safe("<br/>".join(html))
+    # def get_memberships(self, obj):
+    #     memberships = obj.memberships.select_related("organization__jurisdiction")
+    #     html = []
+    #     SHOW_N = 5
+    #     for memb in memberships[:SHOW_N]:
+    #         org = memb.organization
+    #         admin_url = reverse("admin:data_organization_change", args=(org.pk,))
+    #         tmpl = '<a href="%s">%s%s</a>\n'
+    #         html.append(
+    #             tmpl
+    #             % (
+    #                 admin_url,
+    #                 (
+    #                     memb.organization.jurisdiction.name + ": "
+    #                     if memb.organization.jurisdiction
+    #                     else ""
+    #                 ),
+    #                 memb.organization.name,
+    #             )
+    #         )
+    #     more = len(memberships) - SHOW_N
+    #     if 0 < more:
+    #         html.append("And %d more" % more)
+    #     return mark_safe("<br/>".join(html))
 
-    get_memberships.short_description = "Memberships"
-
-    list_display = ("name", "id", "get_memberships")
+    # get_memberships.short_description = "Memberships"

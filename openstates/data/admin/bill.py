@@ -1,8 +1,10 @@
 from django.contrib import admin
 from django.template import defaultfilters
-from .base import ModelAdmin, ReadOnlyTabularInline, IdentifierInline
+from .base import ReadOnlyModelAdmin, ReadOnlyTabularInline, IdentifierInline
 from .. import models
 from django.utils.html import format_html_join
+from django.utils.html import format_html
+from django.urls import reverse
 
 
 class BillAbstractInline(ReadOnlyTabularInline):
@@ -34,7 +36,12 @@ class BillActionInline(ReadOnlyTabularInline):
     get_related_entities.allow_tags = True
 
     list_select_related = ("BillActionRelatedEntity",)
-    readonly_fields = fields = ("date", "organization", "description", "get_related_entities")
+    readonly_fields = fields = (
+        "date",
+        "organization",
+        "description",
+        "get_related_entities",
+    )
 
 
 class RelatedBillInline(ReadOnlyTabularInline):
@@ -54,23 +61,26 @@ class BillSponsorshipInline(ReadOnlyTabularInline):
 class DocVersionInline(ReadOnlyTabularInline):
     model = models.BillVersion
 
-    def get_links(self, obj):
-        return format_html_join(
-            '<br />',
-            '<a href="{}" target="_blank">{}</a>',
-            ((link.url, link.url) for link in obj.links.all())
+    def title_field(self, model: models.BillVersion):
+        admin_url = reverse(
+            "admin:%s_%s_change" % (model._meta.app_label, model._meta.model_name),
+            args=[model.id],
         )
+        tmpl = '<a href="%s">%s</a>'
+        return format_html(tmpl % (admin_url, model.note[:10]))
 
-    get_links.short_description = "Links"
-    get_links.allow_tags = True
+    title_field.short_description = "Note"
+    title_field.allow_tags = True
 
     list_select_related = ("BillVersionLink",)
-    readonly_fields = ("note", "date", "get_links")
+    readonly_fields = (
+        "title_field",
+        "date",
+    )
 
 
 class BillVersionInline(DocVersionInline):
     model = models.BillVersion
-    readonly_fields = fields = ("date", "note", "classification")
 
 
 class BillDocumentInline(DocVersionInline):
@@ -82,8 +92,19 @@ class BillSourceInline(ReadOnlyTabularInline):
     model = models.BillSource
 
 
+@admin.register(models.BillVersion)
+class BillVersionAdmin(ReadOnlyModelAdmin):
+    readonly_fields = fields = (
+        "id",
+        "note",
+        "date",
+        "classification",
+        "extras",
+    )
+
+
 @admin.register(models.Bill)
-class BillAdmin(ModelAdmin):
+class BillAdmin(ReadOnlyModelAdmin):
     readonly_fields = fields = (
         "identifier",
         "legislative_session",
@@ -94,7 +115,12 @@ class BillAdmin(ModelAdmin):
         "subject",
         "extras",
     )
-    search_fields = ["identifier", "title", "legislative_session__jurisdiction__name"]
+    search_fields = [
+        "id",
+        "identifier",
+        "title",
+        "legislative_session__jurisdiction__name",
+    ]
     list_select_related = ("legislative_session", "legislative_session__jurisdiction")
     inlines = [
         BillAbstractInline,
@@ -141,5 +167,8 @@ class BillAdmin(ModelAdmin):
         "get_truncated_title",
     )
 
-    list_filter = ("legislative_session__jurisdiction__name",)
-    ordering = ("legislative_session__jurisdiction__name", "legislative_session", "identifier")
+    ordering = (
+        "legislative_session__jurisdiction__name",
+        "legislative_session",
+        "identifier",
+    )

@@ -17,7 +17,7 @@ def update_bill_fields(bill: Model, *, save: bool = False) -> None:
     # iterate over according to order
     # first action date will use first by order (<)
     # latest will use latest by order (>=)
-    for action in bill.actions.order_by("order"):
+    for action in bill.actions.order_by("date", "order"):
         if not first_action_date or action.date < first_action_date:
             first_action_date = action.date
         if not latest_action_date or action.date >= latest_action_date:

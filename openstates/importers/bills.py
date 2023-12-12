@@ -47,6 +47,10 @@ class BillImporter(BaseImporter):
         ),
     }
     preserve_order = {"actions"}
+    merge_related = {
+        "versions": ["note", "date"],
+        "documents": ["note", "date"],
+    }
 
     def __init__(self, jurisdiction_id: str, do_postimport=True):
         super(BillImporter, self).__init__(jurisdiction_id, do_postimport)

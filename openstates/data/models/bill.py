@@ -1,3 +1,4 @@
+from datetime import datetime
 from django.db import models
 from django.contrib.postgres.fields import ArrayField
 from django.contrib.postgres.search import SearchVectorField
@@ -39,7 +40,7 @@ class Bill(OCDBase):
     # check that array values are in enum?
     classification = ArrayField(base_field=models.TextField(), blank=True, default=list)
     subject = ArrayField(base_field=models.TextField(), blank=True, default=list)
-    citations = models.JSONField(default=dict, blank=True)
+    citations = models.JSONField(default=dict, blank=True, null=True)
 
     # computed fields
     first_action_date = models.CharField(max_length=25, default=None, null=True)
@@ -111,7 +112,7 @@ class BillAction(RelatedBase):
 
     class Meta:
         db_table = "opencivicdata_billaction"
-        ordering = ["order"]
+        ordering = ["date", "order"]
 
     def __str__(self):
         return "{0} action on {1}".format(self.bill.identifier, self.date)
@@ -174,7 +175,7 @@ class BillSponsorship(RelatedEntityBase):
 
 class BillDocument(RelatedBase):
     bill = models.ForeignKey(Bill, related_name="documents", on_delete=models.CASCADE)
-    note = models.CharField(max_length=300)
+    note = models.CharField(max_length=3000)
     date = models.CharField(max_length=10)  # YYYY[-MM[-DD]]
     classification = models.CharField(
         max_length=100, choices=common.BILL_DOCUMENT_CHOICES, blank=True
@@ -190,7 +191,7 @@ class BillDocument(RelatedBase):
 
 class BillVersion(RelatedBase):
     bill = models.ForeignKey(Bill, related_name="versions", on_delete=models.CASCADE)
-    note = models.CharField(max_length=300)
+    note = models.CharField(max_length=3000)
     date = models.CharField(max_length=10)  # YYYY[-MM[-DD]]
     classification = models.CharField(
         max_length=100, choices=common.BILL_VERSION_CHOICES, blank=True

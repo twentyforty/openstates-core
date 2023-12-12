@@ -2,7 +2,7 @@ from pathlib import Path
 from spatula.cli import scrape
 from .people import merge as people_merge
 from .committees import merge as committees_merge
-from ..utils.instrument import Instrumentation
+from ..civiqa.instrument import Instrumentation
 import click
 import time
 

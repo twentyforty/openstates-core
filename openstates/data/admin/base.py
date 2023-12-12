@@ -3,7 +3,7 @@ from django.contrib import admin
 # Helpers ##########
 
 
-class ModelAdmin(admin.ModelAdmin):
+class ReadOnlyModelAdmin(admin.ModelAdmin):
     """deletion of top level objects is evil"""
 
     actions = None
@@ -14,6 +14,24 @@ class ModelAdmin(admin.ModelAdmin):
     # we probably don't want to add anything through the interface
     def has_add_permission(self, request, obj=None):
         return False
+
+    # To ignore `DisallowedModelAdminLookup` error because of non
+    # registered models
+    def lookup_allowed(self, request, key):
+        return True
+
+
+class ModelAdmin(admin.ModelAdmin):
+    """deletion of top level objects is evil"""
+
+    actions = None
+
+    def has_delete_permission(self, request, obj=None):
+        return True
+
+    # we probably don't want to add anything through the interface
+    def has_add_permission(self, request, obj=None):
+        return True
 
     # To ignore `DisallowedModelAdminLookup` error because of non
     # registered models
