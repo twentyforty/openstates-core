@@ -6,9 +6,10 @@ import google.cloud.logging
 import google.cloud.secretmanager_v1 as secretmanager
 
 def load_civiqa_env():
-    if os.environ.get("GOOGLE_CLOUD_PROJECT", None):
+    
+    project_id = os.environ["GOOGLE_CLOUD_PROJECT"]
+    if "GOOGLE_APPLICATION_CREDENTIALS" not in os.environ:
         # Pull secrets from Secret Manager
-        project_id = os.environ.get("GOOGLE_CLOUD_PROJECT")
         client = secretmanager.SecretManagerServiceClient()
         settings_name = os.environ.get("SETTINGS_NAME")
         name = f"projects/{project_id}/secrets/{settings_name}/versions/latest"

@@ -3,7 +3,6 @@ import logging
 from django.db import transaction  # type: ignore
 from django.db.models import Count, Subquery, OuterRef, Q, F
 
-from openstates.data.models.reports import RunPlan  # type: ignore
 from .. import utils
 
 # model imports are inside functions since this file is imported pre-init
@@ -35,8 +34,8 @@ def print_report(report: dict[str, typing.Any]) -> None:
 
 
 @transaction.atomic
-def save_report(report: dict[str, typing.Any], jurisdiction: str) -> RunPlan:
-    from ..data.models import Jurisdiction, RunPlan
+def save_report(report: dict[str, typing.Any], jurisdiction: str) -> typing.Any:
+    from ..data.models import Jurisdiction, RunPlan, LegislativeSession
 
     # set end time
     report["end"] = utils.utcnow()
@@ -62,13 +61,24 @@ def save_report(report: dict[str, typing.Any], jurisdiction: str) -> RunPlan:
     )
 
     for scraper, details in report.get("scrape", {}).items():
-        args = " ".join(
-            "{k}={v}".format(k=k, v=v)
-            for k, v in report["plan"]["scrapers"].get(scraper, {}).items()
-        )
+        scraper_args = []
+        session = None
+        for k, v in report["plan"]["scrapers"].get(scraper, {}).items():
+            scraper_args.append("{}={}".format(k, v))
+            if k == "session":
+                session = v
+        scraper_args = " ".join(scraper_args)
+
+        legislative_session = None
+        if session:
+            legislative_session = LegislativeSession.objects.get(
+                jurisdiction_id=jurisdiction, identifier=session
+            )
+
         sr = plan.scrapers.create(
             scraper=scraper,
-            args=args,
+            legislative_session=legislative_session,
+            args=scraper_args,
             start_time=details["start"],
             end_time=details["end"],
         )

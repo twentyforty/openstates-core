@@ -21,3 +21,5 @@ text/
 _scrapes/
 spatula-cache.db
 .idea/
+env
+secret.json

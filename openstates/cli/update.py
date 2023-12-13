@@ -17,7 +17,7 @@ from types import ModuleType
 
 from django.db import transaction
 
-from openstates.civiqa.publisher import publish_os_update_finished  # type: ignore
+from openstates.civiqa.publisher import publish_os_update_finished
 
 from .. import settings, utils
 from ..exceptions import CommandError
@@ -159,6 +159,7 @@ def do_scrape(
             )
             report[scraper_name] = scraper.do_scrape(**scrape_args)
             session = scrape_args.get("session", "")
+
             if session:
                 stats.write_stats(
                     [
@@ -306,7 +307,6 @@ def do_update(
                 if not cur_scraper:
                     raise CommandError("argument {} before scraper name".format(arg))
                 k, v = arg.split("=", 1)
-                v.strip(" '")
                 scrapers[cur_scraper][k] = v
             elif arg in juris.scrapers:
                 cur_scraper = arg
@@ -337,6 +337,7 @@ def do_update(
     if "scrape" in args.actions:
         active_sessions = check_session_list(juris)
 
+    run_plan = None
     try:
         if "scrape" in args.actions:
             report["scrape"] = do_scrape(juris, args, scrapers, active_sessions)
@@ -419,6 +420,7 @@ def do_update(
                         }
                     ]
                 )
+
         for scrape_type, details in report.get("import", {}).items():  # type: ignore
             for import_type in ["insert", "update", "noop"]:
                 stats.write_stats(
@@ -439,7 +441,8 @@ def do_update(
             run_plan = save_report(report, juris.jurisdiction_id)
 
         print_report(report)
-        publish_os_update_finished(run_plan)
+        if run_plan:
+            publish_os_update_finished(run_plan)
         return report
 
 

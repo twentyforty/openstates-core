@@ -140,12 +140,12 @@ class BaseImporter:
         if settings.IMPORT_TRANSFORMERS.get(self._type):
             self.cached_transformers = settings.IMPORT_TRANSFORMERS[self._type]
 
-    def get_session(self, legislative_session_id: str) -> LegislativeSession:
-        if legislative_session_id not in self.session_cache:
-            self.session_cache[legislative_session_id] = LegislativeSession.objects.get(
-                id=legislative_session_id, jurisdiction_id=self.jurisdiction_id
+    def get_session(self, identifier: str) -> LegislativeSession:
+        if identifier not in self.session_cache:
+            self.session_cache[identifier] = LegislativeSession.objects.get(
+                identifier=identifier, jurisdiction_id=self.jurisdiction_id
             )
-        return self.session_cache[legislative_session_id]
+        return self.session_cache[identifier]
 
     def limit_spec(self, spec: _JsonDict) -> _JsonDict:
         raise NotImplementedError()
@@ -253,19 +253,19 @@ class BaseImporter:
     def import_directory(self, datadir: str) -> dict[str, typing.Dict]:
         """import a JSON directory into the database"""
 
-        def json_stream() -> typing.Iterator[_JsonDict]:
-            # load all json, mapped by json_id
-            files = glob.glob(os.path.join(datadir, self._type + "_*.json"))
+        # load all json, mapped by json_id
+        files = glob.glob(os.path.join(datadir, self._type + "_*.json"))
 
-            count = len(files)
-            for index, fname in enumerate(
-                glob.glob(os.path.join(datadir, self._type + "_*.json"))
-            ):
-                print(f"loading {index} of {count} {fname}")
-                with open(fname) as f:
-                    yield json.load(f)
+        count = len(files)
+        json_data = []
+        for index, fname in enumerate(
+            glob.glob(os.path.join(datadir, self._type + "_*.json"))
+        ):
+            print(f"loading {index} of {count} {fname}")
+            with open(fname) as f:
+                json_data.append(json.load(f))
 
-        return self.import_data(json_stream())
+        return self.import_data(json_data)
 
     def _prepare_imports(
         self, dicts: typing.Iterable[_JsonDict]
@@ -304,7 +304,7 @@ class BaseImporter:
         }
 
         futures = []
-        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=50) as executor:
             imports = self._prepare_imports(data_items)
             for index, (json_id, data) in enumerate(imports):
                 futures.append(executor.submit(self.import_item, data, json_id, index))

@@ -1,4 +1,5 @@
-from django.db import models  # type: ignore
+from django.db import models
+
 from .jurisdiction import Jurisdiction, LegislativeSession
 
 
@@ -31,10 +32,13 @@ class RunPlan(models.Model):
 class ScrapeReport(models.Model):
     plan = models.ForeignKey(RunPlan, related_name="scrapers", on_delete=models.CASCADE)
     scraper = models.CharField(max_length=300)
+    legislative_session = models.ForeignKey(
+        LegislativeSession, on_delete=models.CASCADE, null=True
+    )
     args = models.CharField(max_length=300)
     start_time = models.DateTimeField()
     end_time = models.DateTimeField()
-
+    
     class Meta:
         db_table = "pupa_scrapereport"
 
