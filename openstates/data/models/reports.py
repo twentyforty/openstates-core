@@ -1,3 +1,4 @@
+from django.contrib.postgres.fields import ArrayField
 from django.db import models
 
 from .jurisdiction import Jurisdiction, LegislativeSession
@@ -38,7 +39,7 @@ class ScrapeReport(models.Model):
     args = models.CharField(max_length=300)
     start_time = models.DateTimeField()
     end_time = models.DateTimeField()
-    
+
     class Meta:
         db_table = "pupa_scrapereport"
 
@@ -92,3 +93,24 @@ class SessionDataQualityReport(models.Model):
 
     class Meta:
         db_table = "pupa_sessiondataqualityreport"
+
+
+class BillProcessingResult(models.Model):
+    run_plan = models.ForeignKey(
+        RunPlan,
+        related_name="bill_processing_results",
+        on_delete=models.CASCADE,
+        null=True,
+    )
+    legislative_session = models.ForeignKey(
+        LegislativeSession, on_delete=models.CASCADE, null=True
+    )
+    processed_static_fields_bill_count = models.PositiveIntegerField(null=True, default=None)
+    processed_tags_bill_count = models.PositiveIntegerField(null=True, default=None)
+    processed_dynamic_fields_bill_count = models.PositiveIntegerField(null=True, default=None)
+    processed_progress_dates_bill_count = models.PositiveIntegerField(null=True, default=None)
+    processed_support_bill_count = models.PositiveIntegerField(null=True, default=None)
+    processed_vote_event_count = models.PositiveIntegerField(null=True, default=None)
+
+    succeeded = models.BooleanField(default=True)
+    exception = models.TextField(blank=True, default="", null=True)
