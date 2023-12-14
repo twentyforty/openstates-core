@@ -4,12 +4,29 @@ import os
 from google.api_core.exceptions import NotFound
 from google.cloud.pubsub import PublisherClient
 
+from openstates.data.models.jurisdiction import LegislativeSession
+
 project_id = os.environ["GOOGLE_CLOUD_PROJECT"]
 publisher_client = PublisherClient()
 
 
 OS_UPDATE_FINISHED = "os-update-finished"
-    
+OS_UPDATE_REQUESTED = "os-update-requested"
+
+
+def publish_os_update_request(legislative_session: LegislativeSession, scrapers=["bills"]):
+    jurisdiction_id = legislative_session.jurisdiction_id
+    session_identifier = legislative_session.identifier
+    active_only = False
+    jurisdiction_id, scrapers, session_identifier, active_only
+    _publish(OS_UPDATE_REQUESTED, {
+        "jurisdiction_id": jurisdiction_id,
+        "scrapers": scrapers,
+        "session_identifier": session_identifier,
+        "active_only": active_only,
+    })
+
+
 def publish_os_update_finished(run_plan):
     _publish(OS_UPDATE_FINISHED, {"run_plan_id": run_plan.id})
 
