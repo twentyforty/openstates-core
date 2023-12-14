@@ -1,5 +1,8 @@
 #  type: ignore
-from django.contrib import admin  # type: ignore
+from django.contrib import admin
+from openstates.data.admin.other import LegislativeSessionInline
+
+from openstates.data.models.reports import BillProcessingResult  # type: ignore
 from .. import models
 
 
@@ -55,6 +58,41 @@ class RunPlanAdmin(admin.ModelAdmin):
 
     def has_add_permission(self, request, obj=None):
         return False
+
+
+class RunPlanInline(admin.TabularInline):
+    model = models.RunPlan
+    readonly_fields = (
+        "success",
+        "start_time",
+        "end_time",
+        "exception",
+        "traceback",
+    )
+
+    def has_add_permission(self, request, obj=None):
+        return False
+
+    can_delete = False
+
+
+@admin.register(BillProcessingResult)
+class BillProcessingResultAdmin(admin.ModelAdmin):
+    actions = None
+
+    readonly_fields = (
+        "processed_static_fields_bill_count",
+        "processed_tags_bill_count",
+        "processed_dynamic_fields_bill_count",
+        "processed_progress_dates_bill_count",
+        "processed_support_bill_count",
+        "updated_gsheet_tracker_bill_count",
+        "stats_calculated_legislative_session_count",
+        "succeeded",
+        "exception",
+    )
+    
+    inlines = [RunPlanInline, LegislativeSessionInline]
 
 
 @admin.register(models.SessionDataQualityReport)
