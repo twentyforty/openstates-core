@@ -307,6 +307,7 @@ def do_update(
                 if not cur_scraper:
                     raise CommandError("argument {} before scraper name".format(arg))
                 k, v = arg.split("=", 1)
+                v = v.strip("'")
                 scrapers[cur_scraper][k] = v
             elif arg in juris.scrapers:
                 cur_scraper = arg
