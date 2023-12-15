@@ -7,7 +7,7 @@ from google.cloud.pubsub import PublisherClient
 from openstates.data.models.jurisdiction import LegislativeSession
 
 project_id = os.environ["GOOGLE_CLOUD_PROJECT"]
-publisher_client = PublisherClient()
+
 
 
 OS_UPDATE_FINISHED = "os-update-finished"
@@ -32,6 +32,8 @@ def publish_os_update_finished(run_plan):
 
 
 def _publish(topic, args: dict):
+    publisher_client = PublisherClient()
+
     topic_id = _to_topic_id(topic)
     topic_path = publisher_client.topic_path(project_id, topic_id)
 

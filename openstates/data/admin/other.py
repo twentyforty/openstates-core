@@ -1,4 +1,6 @@
 from collections.abc import Sequence
+from logging import disable
+from os import name
 from django.contrib import admin
 from django.db.models.query import QuerySet
 from django.http.request import HttpRequest
@@ -8,6 +10,13 @@ from openstates.civiqa.publisher import publish_os_update_request
 from openstates.data.admin.organization import OrganizationInline
 from openstates.data.admin.reports import ScrapeReportInline, SessionDataQualityInline
 from openstates.data.models.reports import BillProcessingResult
+from admin_extra_buttons.api import (
+    ExtraButtonsMixin,
+    button,
+    confirm_action,
+    link,
+    view,
+)
 
 from .. import models
 from .base import ModelAdmin, ReadOnlyModelAdmin, ReadOnlyTabularInline
@@ -188,7 +197,7 @@ class BillProcessingResultAdminInline(ReadOnlyTabularInline):
 
 
 @admin.register(models.LegislativeSession)
-class LegislativeSessionAdmin(ReadOnlyModelAdmin):
+class LegislativeSessionAdmin(ExtraButtonsMixin, ReadOnlyModelAdmin):
     search_fields = (
         "jurisdiction__name",
         "identifier",
@@ -229,6 +238,13 @@ class LegislativeSessionAdmin(ReadOnlyModelAdmin):
             publish_os_update_request(
                 legislative_session=legislative_session, scrapers=["bills"]
             )
+    
+    @button(label="Trigger Scrape", disable_on_click=True)
+    def trigger_scraper_button(self, request, pk):
+        legislative_session = self.get_object(request, pk)
+        publish_os_update_request(
+            legislative_session=legislative_session, scrapers=["bills"]
+        )
 
     @admin.display(description="Jurisdiction", ordering="jurisdiction__name")
     def get_jurisdiction(self, obj):
