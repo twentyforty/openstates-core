@@ -4,7 +4,6 @@ import os
 from google.api_core.exceptions import NotFound
 from google.cloud.pubsub import PublisherClient
 
-from openstates.data.models.jurisdiction import LegislativeSession
 
 project_id = os.environ["GOOGLE_CLOUD_PROJECT"]
 
