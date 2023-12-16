@@ -114,6 +114,9 @@ class BillProcessingResult(models.Model):
     stats_calculated_legislative_session_count = models.PositiveIntegerField(
         null=True, default=None
     )
+    legislative_sessions_processed_count = models.PositiveIntegerField(
+        null=True, default=None
+    )
     succeeded = models.BooleanField(default=True)
     exception = models.TextField(blank=True, default="", null=True)
     created_at = models.DateTimeField(auto_now_add=True)

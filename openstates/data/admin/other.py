@@ -6,7 +6,7 @@ from django.db.models.query import QuerySet
 from django.http.request import HttpRequest
 from django.urls import reverse
 from django.utils.html import format_html
-from openstates.civiqa.publisher import publish_os_update_request
+from openstates.civiqa.publisher import publish_os_update_finished, publish_os_update_request
 from openstates.data.admin.organization import OrganizationInline
 from openstates.data.admin.reports import ScrapeReportInline, SessionDataQualityInline
 from openstates.data.models.reports import BillProcessingResult
@@ -236,6 +236,13 @@ class LegislativeSessionAdmin(ExtraButtonsMixin, ReadOnlyModelAdmin):
     def trigger_scraper(self, request, queryset: QuerySet):
         for legislative_session in queryset:
             publish_os_update_request(
+                legislative_session=legislative_session, scrapers=["bills"]
+            )
+    
+    @admin.action(description="Process Bills")
+    def process_bills(self, request, queryset: QuerySet):
+        for legislative_session in queryset:
+            publish_os_update_finished(
                 legislative_session=legislative_session, scrapers=["bills"]
             )
     

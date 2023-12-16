@@ -552,7 +552,6 @@ def main() -> int:
 
     stats.close()
 
-    publish_os_update_finished
     if report.get("success", False):
         return 0
     else:

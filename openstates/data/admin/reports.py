@@ -67,7 +67,9 @@ class RunPlanAdmin(ReadOnlyModelAdmin):
     )
     list_display = ("id", "jurisdiction", "success", "start_time")
     inlines = [ScrapeReportInline, ImportObjectsInline]
-
+    list_filter = (("jurisdiction", admin.RelatedOnlyFieldListFilter), "success")
+    search_fields = ("jurisdiction__name", "id")
+    
     def has_delete_permission(self, request, obj=None):
         return False
 

@@ -9,26 +9,45 @@ from openstates.data.models.jurisdiction import LegislativeSession
 project_id = os.environ["GOOGLE_CLOUD_PROJECT"]
 
 
-
 OS_UPDATE_FINISHED = "os-update-finished"
 OS_UPDATE_REQUESTED = "os-update-requested"
+LEGISLATIVE_SESSION_SCRAPE_SCHEDULE_CHANGED = (
+    "legislative-session-scrape-schedule-changed"
+)
 
 
-def publish_os_update_request(legislative_session: LegislativeSession, scrapers=["bills"]):
+def publish_os_update_request(
+    legislative_session: LegislativeSession, scrapers=["bills"]
+):
     jurisdiction_id = legislative_session.jurisdiction_id
     session_identifier = legislative_session.identifier
     active_only = False
     jurisdiction_id, scrapers, session_identifier, active_only
-    _publish(OS_UPDATE_REQUESTED, {
-        "jurisdiction_id": jurisdiction_id,
-        "scrapers": scrapers,
-        "session_identifier": session_identifier,
-        "active_only": active_only,
-    })
+    _publish(
+        OS_UPDATE_REQUESTED,
+        {
+            "jurisdiction_id": jurisdiction_id,
+            "scrapers": scrapers,
+            "session_identifier": session_identifier,
+            "active_only": active_only,
+        },
+    )
 
 
 def publish_os_update_finished(run_plan):
     _publish(OS_UPDATE_FINISHED, {"run_plan_id": run_plan.id})
+
+
+def publish_legislative_session_scrape_schedule_changed(
+    legislative_session: LegislativeSession, schedule: str
+):
+    _publish(
+        LEGISLATIVE_SESSION_SCRAPE_SCHEDULE_CHANGED,
+        {
+            "legislative_session_id": legislative_session.id,
+            "schedule": schedule,
+        },
+    )
 
 
 def _publish(topic, args: dict):
