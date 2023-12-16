@@ -60,6 +60,7 @@ def save_report(report: dict[str, typing.Any], jurisdiction: str) -> typing.Any:
         traceback=report.get("traceback", ""),
     )
 
+    legislative_session = None
     for scraper, details in report.get("scrape", {}).items():
         scraper_args = []
         session = None
@@ -69,7 +70,6 @@ def save_report(report: dict[str, typing.Any], jurisdiction: str) -> typing.Any:
                 session = v
         scraper_args = " ".join(scraper_args)
 
-        legislative_session = None
         if session:
             legislative_session = LegislativeSession.objects.get(
                 jurisdiction_id=jurisdiction, identifier=session
@@ -84,6 +84,10 @@ def save_report(report: dict[str, typing.Any], jurisdiction: str) -> typing.Any:
         )
         for object_type, num in details["objects"].items():
             sr.scraped_objects.create(object_type=object_type, count=num)
+
+    if legislative_session:
+        plan.legislative_session = legislative_session
+        plan.save()
 
     for object_type, changes in report.get("import", {}).items():
         if changes["insert"] or changes["update"] or changes["noop"]:

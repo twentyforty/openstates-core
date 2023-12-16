@@ -20,6 +20,9 @@ class RunPlan(models.Model):
     jurisdiction = models.ForeignKey(
         Jurisdiction, related_name="runs", on_delete=models.CASCADE
     )
+    legislative_session = models.ForeignKey(
+        LegislativeSession, on_delete=models.CASCADE, null=True
+    )
     success = models.BooleanField(default=True)
     start_time = models.DateTimeField()
     end_time = models.DateTimeField()
@@ -90,6 +93,7 @@ class SessionDataQualityReport(models.Model):
     unmatched_sponsor_people = models.JSONField()
     unmatched_sponsor_organizations = models.JSONField()
     unmatched_voters = models.JSONField()
+    created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
         db_table = "pupa_sessiondataqualityreport"
