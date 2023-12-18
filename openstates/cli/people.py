@@ -6,7 +6,6 @@ import itertools
 from collections import Counter, defaultdict
 from pathlib import Path
 import click
-import boto3  # type: ignore
 import logging
 import time
 import yaml
@@ -19,7 +18,6 @@ from ..utils.people import (
     get_data_path,
     dump_obj,
     get_all_abbreviations,
-    download_state_images,
     load_municipalities,
 )
 from ..utils.people.retire import retire_person, add_vacancy, retire_file
@@ -35,7 +33,6 @@ from ..civiqa.instrument import Instrumentation
 
 stats = Instrumentation()
 
-logging.getLogger("boto3").setLevel(logging.WARNING)
 logging.getLogger("botocore").setLevel(logging.WARNING)
 logging.getLogger("s3transfer").setLevel(logging.WARNING)
 logging.getLogger("urllib3").setLevel(logging.WARNING)
@@ -458,9 +455,6 @@ def to_csv(abbreviations: list[str], upload: bool) -> None:
     if not abbreviations:
         abbreviations = get_all_abbreviations()
 
-    if upload:
-        s3 = boto3.client("s3")
-
     for abbr in abbreviations:
         click.secho("==== {} ====".format(abbr), bold=True)
         jurisdiction_id = abbr_to_jid(abbr)
@@ -468,20 +462,6 @@ def to_csv(abbreviations: list[str], upload: bool) -> None:
         person_files = sorted((directory / "legislature").glob("*.yml"))
         fname = f"{abbr}.csv"
         write_csv(person_files, jurisdiction_id, fname)
-
-        if upload:
-            s3.upload_file(
-                fname,
-                "data.openstates.org",
-                f"people/current/{abbr}.csv",
-                ExtraArgs={
-                    "ContentType": "text/csv; charset=UTF-8",
-                    "ACL": "public-read",
-                },
-            )
-            click.secho(
-                f"uploaded to data.openstates.org/people/current/{abbr}.csv", fg="green"
-            )
 
 
 @main.command()
@@ -593,25 +573,6 @@ def retire(
 
         new_filename = retire_file(filename)
         click.secho(f"moved from {filename} to {new_filename}")
-
-
-@main.command()
-@click.argument("abbreviations", nargs=-1)
-@click.option(
-    "--skip-existing/--no-skip-existing",
-    help="Skip processing for files that already exist on S3. (default: true)",
-)
-def sync_images(abbreviations: list[str], skip_existing: bool) -> None:
-    """
-    Download images and sync them to S3.
-
-    <ABBR> can be provided to restrict to single state.
-    """
-    if not abbreviations:
-        abbreviations = get_all_abbreviations()
-
-    for abbr in abbreviations:
-        download_state_images(abbr, skip_existing)
 
 
 @main.command()

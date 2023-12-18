@@ -1,10 +1,10 @@
-import boto3  # noqa
 import datetime
 import importlib
 import json
 import jsonschema
 import logging
 import os
+from openstates.cli.reports import ScraperReport
 import scrapelib
 import uuid
 from collections import defaultdict, OrderedDict
@@ -74,6 +74,7 @@ class Scraper(scrapelib.Scraper):
         jurisdiction,
         datadir,
         *,
+        legislative_session=None,
         strict_validation=True,
         fastmode=False,
         realtime=False,
@@ -82,6 +83,7 @@ class Scraper(scrapelib.Scraper):
 
         # set options
         self.jurisdiction = jurisdiction
+        self.legislative_session = legislative_session
         self.datadir = datadir
         self.realtime = realtime
 
@@ -124,36 +126,6 @@ class Scraper(scrapelib.Scraper):
             handler = importlib.import_module(modname)
             self.scrape_output_handler = handler.Handler(self)
 
-    def push_to_queue(self):
-        """Push this output to the sqs for realtime imports."""
-
-        # Create SQS client
-        sqs = boto3.client("sqs")
-
-        queue_url = settings.SQS_QUEUE_URL
-        bucket = settings.S3_REALTIME_BASE.replace("s3://", "")
-
-        message_body = json.dumps(
-            {
-                "file_path": self.output_file_path,
-                "bucket": bucket,
-                "jurisdiction_id": self.jurisdiction.jurisdiction_id,
-                "jurisdiction_name": self.jurisdiction.name,
-            }
-        )
-
-        # Send message to SQS queue
-        response = sqs.send_message(
-            QueueUrl=queue_url,
-            DelaySeconds=10,
-            MessageAttributes={
-                "Title": {"DataType": "String", "StringValue": "S3 Output Path"},
-                "Author": {"DataType": "String", "StringValue": "Open States"},
-            },
-            MessageBody=message_body,
-        )
-        self.info(f"Message ID: {response['MessageId']}")
-
     def save_object(self, obj):
         """
         Save object to disk as JSON.
@@ -180,34 +152,8 @@ class Scraper(scrapelib.Scraper):
         if self.scrape_output_handler is None:
             file_path = os.path.join(self.datadir, filename)
 
-            # Remove redundant prefix
-            try:
-                upload_file_path = file_path[
-                    file_path.index("_data") + len("_data") + 1:
-                ]
-            except Exception:
-                upload_file_path = file_path
-
-            if self.realtime:
-                self.output_file_path = str(upload_file_path)
-
-                s3 = boto3.client("s3")
-                bucket = settings.S3_REALTIME_BASE.removeprefix("s3://")
-
-                s3.put_object(
-                    Body=json.dumps(
-                        OrderedDict(sorted(obj.as_dict().items())),
-                        cls=utils.JSONEncoderPlus,
-                        separators=(",", ": "),
-                    ),
-                    Bucket=bucket,
-                    Key=self.output_file_path,
-                )
-
-                self.push_to_queue()
-            else:
-                with open(file_path, "w") as f:
-                    json.dump(obj.as_dict(), f, cls=utils.JSONEncoderPlus)
+            with open(file_path, "w") as f:
+                json.dump(obj.as_dict(), f, cls=utils.JSONEncoderPlus)
 
         else:
             self.scrape_output_handler.handle(obj)
@@ -225,10 +171,12 @@ class Scraper(scrapelib.Scraper):
         for obj in obj._related:
             self.save_object(obj)
 
-    def do_scrape(self, **kwargs):
-        record = {"objects": defaultdict(int)}
+    def do_scrape(self, **kwargs) -> ScraperReport:
+        report = ScraperReport(
+            start=utils.utcnow(),
+            objects=defaultdict(int),
+        )
         self.output_names = defaultdict(set)
-        record["start"] = utils.utcnow()
         try:
             for obj in self.scrape(**kwargs) or []:
                 # allow for returning empty objects in a list
@@ -253,12 +201,14 @@ class Scraper(scrapelib.Scraper):
                     "no objects returned from {} scrape".format(self.__class__.__name__)
                 )
 
-        record["end"] = utils.utcnow()
-        record["skipped"] = getattr(self, "skipped", 0)
+        report.end = utils.utcnow()
+        report.skipped = getattr(self, "skipped", 0)
         for _type, nameset in self.output_names.items():
-            record["objects"][_type] += len(nameset)
+            report.objects[_type] += len(nameset)
 
-        return record
+        report.objects = dict(report.objects)
+
+        return report
 
     def scrape(self, **kwargs):
         raise NotImplementedError(

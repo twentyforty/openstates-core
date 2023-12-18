@@ -59,7 +59,7 @@ class ScrapeObjects(models.Model):
 
 
 class ImportObjects(models.Model):
-    report = models.ForeignKey(
+    plan = models.ForeignKey(
         RunPlan, related_name="imported_objects", on_delete=models.CASCADE
     )
     object_type = models.CharField(max_length=20, choices=OBJECT_TYPES)
@@ -78,7 +78,12 @@ class SessionDataQualityReport(models.Model):
     legislative_session = models.ForeignKey(
         LegislativeSession, on_delete=models.CASCADE
     )
-
+    run_plan = models.OneToOneField(
+        RunPlan,
+        related_name="session_data_quality_report",
+        on_delete=models.CASCADE,
+        null=True,
+    )
     bills_missing_actions = models.PositiveIntegerField()
     bills_missing_sponsors = models.PositiveIntegerField()
     bills_missing_versions = models.PositiveIntegerField()
@@ -109,12 +114,20 @@ class BillProcessingResult(models.Model):
     legislative_session = models.ForeignKey(
         LegislativeSession, on_delete=models.CASCADE, null=True
     )
-    processed_static_fields_bill_count = models.PositiveIntegerField(null=True, default=None)
+    processed_static_fields_bill_count = models.PositiveIntegerField(
+        null=True, default=None
+    )
     processed_tags_bill_count = models.PositiveIntegerField(null=True, default=None)
-    processed_dynamic_fields_bill_count = models.PositiveIntegerField(null=True, default=None)
-    processed_progress_dates_bill_count = models.PositiveIntegerField(null=True, default=None)
+    processed_dynamic_fields_bill_count = models.PositiveIntegerField(
+        null=True, default=None
+    )
+    processed_progress_dates_bill_count = models.PositiveIntegerField(
+        null=True, default=None
+    )
     processed_support_bill_count = models.PositiveIntegerField(null=True, default=None)
-    updated_gsheet_tracker_bill_count = models.PositiveIntegerField(null=True, default=None)
+    updated_gsheet_tracker_bill_count = models.PositiveIntegerField(
+        null=True, default=None
+    )
     stats_calculated_legislative_session_count = models.PositiveIntegerField(
         null=True, default=None
     )

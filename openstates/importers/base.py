@@ -6,12 +6,14 @@ import logging
 import typing
 from django.db.models import Q, Model
 from django.db.models.signals import post_save
+
+from openstates.cli.reports import ImportReport
 from .. import settings
 from ..data.models import LegislativeSession, Person, Bill
 from ..exceptions import DuplicateItemError, UnresolvedIdError, DataImportError
 from ..utils import get_pseudo_id, utcnow
 from ._types import _ID, _JsonDict, _RelatedModels, _TransformerMapping
-import concurrent
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 _PersonCacheKey = tuple[str, typing.Optional[str], typing.Optional[str]]
 
@@ -256,12 +258,8 @@ class BaseImporter:
         # load all json, mapped by json_id
         files = glob.glob(os.path.join(datadir, self._type + "_*.json"))
 
-        count = len(files)
         json_data = []
-        for index, fname in enumerate(
-            glob.glob(os.path.join(datadir, self._type + "_*.json"))
-        ):
-            print(f"loading {index} of {count} {fname}")
+        for fname in files:
             with open(fname) as f:
                 json_data.append(json.load(f))
 
@@ -291,32 +289,33 @@ class BaseImporter:
                 self.duplicates[json_id] = seen_hashes[objhash]
 
     def import_data(
-        self, data_items: typing.Iterable[_JsonDict]
-    ) -> dict[str, typing.Dict]:
+        self,
+        data_items: typing.Iterable[_JsonDict],
+    ) -> ImportReport:
         """import a bunch of dicts together"""
         # keep counts of all actions
-        record = {
-            "insert": 0,
-            "update": 0,
-            "noop": 0,
-            "start": utcnow(),
-            "records": {"insert": [], "update": [], "noop": []},
-        }
+        import_report = ImportReport(
+            insert=0,
+            update=0,
+            noop=0,
+            start=utcnow(),
+            records={"insert": [], "update": [], "noop": []},
+        )
 
         futures = []
-        with concurrent.futures.ThreadPoolExecutor(max_workers=50) as executor:
+        with ThreadPoolExecutor(max_workers=50) as executor:
             imports = self._prepare_imports(data_items)
             for index, (json_id, data) in enumerate(imports):
                 futures.append(executor.submit(self.import_item, data, json_id, index))
 
-            for future in concurrent.futures.as_completed(futures):
+            for future in as_completed(futures):
                 obj_id, what, json_id = future.result()
                 if not obj_id or not what:
                     "Skipping data because it did not have an associated ID or type"
                     continue
                 self.json_to_db_id[json_id] = obj_id
-                record["records"][what].append(obj_id)
-                record[what] += 1
+                import_report.records[what].append(obj_id)
+                setattr(import_report, what, getattr(import_report, what) + 1)
 
         # all objects are loaded, a perfect time to do inter-object resolution and other tasks
         if self.json_to_db_id and self.do_postimport:
@@ -325,12 +324,10 @@ class BaseImporter:
             # and events & votes get deleted!
             self.postimport()
 
-        record["end"] = utcnow()
-
-        return {self._type: record}
+        import_report.end = utcnow()
+        return import_report
 
     def import_item(self, data: _JsonDict, json_id, print_index) -> tuple[_ID, str]:
-        print(f"importing {print_index} {json_id}")
         """function used by import_data"""
         what = "noop"
 
@@ -582,6 +579,10 @@ class BaseImporter:
                 Q(name__iexact=name)
                 | Q(other_names__name__iexact=name)
                 | Q(family_name__iexact=name)
+                | Q(
+                    memberships__scraped_names__value__iexact=name,
+                    memberships__scraped_names__approved=True,
+                )
             )
         else:
             spec = Q(**spec)

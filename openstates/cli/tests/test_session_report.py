@@ -8,7 +8,7 @@ from openstates.data.models import (
     Bill,
     VoteEvent,
 )
-from openstates.cli.reports import generate_session_report
+from openstates.cli.reports import generate_session_data_quality_report
 
 
 def create_data():
@@ -31,11 +31,11 @@ def test_bills_missing_actions():
         identifier="HB2", title="Two", legislative_session_id=session
     )
 
-    report = generate_session_report(session)
+    report = generate_session_data_quality_report(session)
     assert report.bills_missing_actions == 2
 
     b.actions.create(description="Introduced", order=1, organization=org)
-    report = generate_session_report(session)
+    report = generate_session_data_quality_report(session)
     assert report.bills_missing_actions == 1
 
 
@@ -47,11 +47,11 @@ def test_bills_missing_sponsors():
         identifier="HB2", title="Two", legislative_session_id=session
     )
 
-    report = generate_session_report(session)
+    report = generate_session_data_quality_report(session)
     assert report.bills_missing_sponsors == 2
 
     b.sponsorships.create(name="Roy", entity_type="person")
-    report = generate_session_report(session)
+    report = generate_session_data_quality_report(session)
     assert report.bills_missing_sponsors == 1
 
 
@@ -63,11 +63,11 @@ def test_bills_missing_versions():
         identifier="HB2", title="Two", legislative_session_id=session
     )
 
-    report = generate_session_report(session)
+    report = generate_session_data_quality_report(session)
     assert report.bills_missing_versions == 2
 
     b.versions.create(note="Final Copy")
-    report = generate_session_report(session)
+    report = generate_session_data_quality_report(session)
     assert report.bills_missing_versions == 1
 
 
@@ -84,12 +84,12 @@ def test_votes_missing_bill():
         legislative_session_id=session, motion_text="Amendment", organization=org
     )
 
-    report = generate_session_report(session)
+    report = generate_session_data_quality_report(session)
     assert report.votes_missing_bill == 2
 
     v.bill = b
     v.save()
-    report = generate_session_report(session)
+    report = generate_session_data_quality_report(session)
     assert report.votes_missing_bill == 1
 
 
@@ -109,11 +109,11 @@ def test_votes_missing_voters():
         organization=org,
     )
 
-    report = generate_session_report(session)
+    report = generate_session_data_quality_report(session)
     assert report.votes_missing_voters == 2
 
     v.votes.create(option="yes", voter_name="Speaker")
-    report = generate_session_report(session)
+    report = generate_session_data_quality_report(session)
     assert report.votes_missing_voters == 1
 
 
@@ -133,17 +133,17 @@ def test_missing_yes_no_counts():
         organization=org,
     )
 
-    report = generate_session_report(session)
+    report = generate_session_data_quality_report(session)
     assert report.votes_missing_yes_count == 2
     assert report.votes_missing_no_count == 2
 
     v.counts.create(option="yes", value=1)
-    report = generate_session_report(session)
+    report = generate_session_data_quality_report(session)
     assert report.votes_missing_yes_count == 1
     assert report.votes_missing_no_count == 2
 
     v.counts.create(option="no", value=0)
-    report = generate_session_report(session)
+    report = generate_session_data_quality_report(session)
     assert report.votes_missing_yes_count == 1
     assert report.votes_missing_no_count == 1
 
@@ -159,32 +159,32 @@ def test_votes_with_bad_counts():
         legislative_session_id=session, motion_text="Passage", bill=b, organization=org
     )
 
-    report = generate_session_report(session)
+    report = generate_session_data_quality_report(session)
     assert report.votes_with_bad_counts == 0
 
     # add count, breaking
     v.counts.create(option="yes", value=1)
-    report = generate_session_report(session)
+    report = generate_session_data_quality_report(session)
     assert report.votes_with_bad_counts == 1
 
     # add voter, fixing
     v.votes.create(option="yes", voter_name="One")
-    report = generate_session_report(session)
+    report = generate_session_data_quality_report(session)
     assert report.votes_with_bad_counts == 0
 
     # add voter, breaking
     v.votes.create(option="no", voter_name="Two")
-    report = generate_session_report(session)
+    report = generate_session_data_quality_report(session)
     assert report.votes_with_bad_counts == 1
 
     # add count, still not equal
     v.counts.create(option="no", value=2)
-    report = generate_session_report(session)
+    report = generate_session_data_quality_report(session)
     assert report.votes_with_bad_counts == 1
 
     # add voter, fixing
     v.votes.create(option="no", voter_name="Three")
-    report = generate_session_report(session)
+    report = generate_session_data_quality_report(session)
     assert report.votes_with_bad_counts == 0
 
 
@@ -204,7 +204,7 @@ def test_unmatched_sponsors():
 
     b2.sponsorships.create(name="Wendy", entity_type="person")
 
-    report = generate_session_report(session)
+    report = generate_session_data_quality_report(session)
     assert len(report.unmatched_sponsor_people) == 2
     assert report.unmatched_sponsor_people["Roy"] == 1
     assert report.unmatched_sponsor_people["Wendy"] == 2
@@ -214,7 +214,7 @@ def test_unmatched_sponsors():
     sp = b1.sponsorships.get(name="Roy")
     sp.person_id = person.id
     sp.save()
-    report = generate_session_report(session)
+    report = generate_session_data_quality_report(session)
     assert report.unmatched_sponsor_people == {"Wendy": 2}
 
 
@@ -231,14 +231,14 @@ def test_unmatched_voters():
         legislative_session_id=session, motion_text="Override", bill=b, organization=org
     )
 
-    report = generate_session_report(session)
+    report = generate_session_data_quality_report(session)
     assert report.unmatched_voters == {}
 
     # add voters
     v1.votes.create(option="yes", voter_name="Roy")
     v1.votes.create(option="yes", voter_name="Wendy")
     v2.votes.create(option="yes", voter_name="Wendy")
-    report = generate_session_report(session)
+    report = generate_session_data_quality_report(session)
     assert len(report.unmatched_voters) == 2
     assert report.unmatched_voters["Roy"] == 1
     assert report.unmatched_voters["Wendy"] == 2
@@ -247,5 +247,5 @@ def test_unmatched_voters():
     voter = v1.votes.get(voter_name="Roy")
     voter.voter_id = person.id
     voter.save()
-    report = generate_session_report(session)
+    report = generate_session_data_quality_report(session)
     assert report.unmatched_voters == {"Wendy": 2}

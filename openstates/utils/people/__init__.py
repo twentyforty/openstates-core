@@ -9,4 +9,3 @@ from .general import (
     load_municipalities,
 )
 from .retire import retire_file, retire_person
-from .images import download_state_images

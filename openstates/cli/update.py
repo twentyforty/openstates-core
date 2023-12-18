@@ -1,34 +1,49 @@
+# ruff: noqa: E402
+
+from openstates.utils.django import init_django
+
+init_django()
+
 import argparse
 import contextlib
 import datetime
 import glob
 import importlib
-import inspect
 import logging
-import logging.config
 import os
 import signal
 import sys
-import time
 import traceback
 import typing
-from collections import defaultdict
 from types import ModuleType
 
 from django.db import transaction
-
+from openstates import settings, utils
+from openstates.civiqa import civiqa_env
 from openstates.civiqa.publisher import publish_os_update_finished
-
-from .. import settings, utils
-from ..exceptions import CommandError
-from ..scrape import JurisdictionScraper, State
-from ..utils.django import init_django
-from ..civiqa.instrument import Instrumentation
-from .reports import generate_session_report, print_report, save_report
-from ..civiqa.civiqa_env import load_civiqa_env
+from openstates.cli.reports import (
+    ImportReport,
+    Plan,
+    Report,
+    ScraperReport,
+    generate_session_data_quality_report,
+    print_report,
+    save_report,
+)
+from openstates.data.models import Jurisdiction, LegislativeSession, RunPlan
+from openstates.exceptions import CommandError
+from openstates.importers import (
+    BillImporter,
+    EventImporter,
+    JurisdictionImporter,
+    VoteEventImporter,
+)
+from openstates.importers.base import BaseImporter
+from openstates.scrape import JurisdictionScraper, State
+from openstates.scrape.base import Scraper
 
 logger = logging.getLogger("openstates")
-stats = Instrumentation()
+
 
 ALL_ACTIONS = ("scrape", "import")
 
@@ -65,11 +80,11 @@ def get_jurisdiction(module_name: str) -> tuple[State, ModuleType]:
 
 
 def do_scrape(
-    juris: State,
+    state: State,
+    legislative_session: LegislativeSession,
     args: argparse.Namespace,
-    scrapers: dict[str, dict[str, str]],
-    active_sessions: set[str],
-) -> dict[str, typing.Any]:
+    scraper_args_by_name: dict[str, dict[str, str]],
+) -> dict[str, ScraperReport]:
     # make output and cache dirs
     utils.makedirs(settings.CACHE_DIR)
     datadir = os.path.join(settings.SCRAPED_DATA_DIR, args.module)
@@ -78,161 +93,65 @@ def do_scrape(
     for f in glob.glob(datadir + "/*.json"):
         os.remove(f)
 
-    report = {}
+    scraper_reports: dict[str, ScraperReport] = {}
 
     # do jurisdiction
-    jscraper = JurisdictionScraper(
-        juris,
+    jurisdiction_scraper = JurisdictionScraper(
+        state,
         datadir,
         strict_validation=args.strict,
         fastmode=args.fastmode,
         realtime=args.realtime,
     )
-    report["jurisdiction"] = jscraper.do_scrape()
-    stats.write_stats(
-        [
-            {
-                "metric": "jurisdiction_scrapes",
-                "fields": {"total": 1},
-                "tags": {"jurisdiction": juris.name},
-            }
-        ]
-    )
+    scraper_reports["jurisdiction"] = jurisdiction_scraper.do_scrape()
 
-    for scraper_name, scrape_args in scrapers.items():
-        ScraperCls = juris.scrapers[scraper_name]
-        if (
-            "session" in inspect.getargspec(ScraperCls.scrape).args
-            and "session" not in scrape_args
-        ):
-            logger.warning(
-                f"no session provided, using active sessions: {active_sessions}"
-            )
-            # handle automatically setting session if required by the scraper
-            # the report logic was originally meant for one run, so we combine the start & end times
-            # and counts here
-            report[scraper_name] = {
-                "start": None,
-                "end": None,
-                "objects": defaultdict(int),
-            }
-            for session in active_sessions:
-                # new scraper each time
-                scraper = ScraperCls(
-                    juris,
-                    datadir,
-                    strict_validation=args.strict,
-                    fastmode=args.fastmode,
-                    realtime=args.realtime,
-                )
-                partial_report = scraper.do_scrape(**scrape_args, session=session)
-                stats.write_stats(
-                    [
-                        {
-                            "metric": "session_scrapes",
-                            "fields": {"total": 1},
-                            "tags": {"jurisdiction": juris.name, "session": session},
-                        }
-                    ]
-                )
-                if not report[scraper_name]["start"]:
-                    report[scraper_name]["start"] = partial_report["start"]
-                report[scraper_name]["end"] = partial_report["end"]
-                for obj, val in partial_report["objects"].items():
-                    report[scraper_name]["objects"][obj] += val
-                stats.write_stats(
-                    [
-                        {
-                            "metric": "last_session_scrape",
-                            "fields": {"time": int(time.time())},
-                            "tags": {"jurisdiction": juris.name, "session": session},
-                        }
-                    ]
-                )
-        else:
-            scraper = ScraperCls(
-                juris,
-                datadir,
-                strict_validation=args.strict,
-                fastmode=args.fastmode,
-                realtime=args.realtime,
-            )
-            report[scraper_name] = scraper.do_scrape(**scrape_args)
-            session = scrape_args.get("session", "")
+    for scraper_name, scraper_args in scraper_args_by_name.items():
+        ScraperClass = state.scrapers[scraper_name]
+        # new scraper each time
+        scraper: Scraper = ScraperClass(
+            state,
+            datadir,
+            legislative_session=legislative_session,
+            strict_validation=args.strict,
+            fastmode=args.fastmode,
+            realtime=args.realtime,
+        )
+        scraper_reports[scraper_name] = scraper.do_scrape(
+            **scraper_args, session=legislative_session.identifier
+        )
 
-            if session:
-                stats.write_stats(
-                    [
-                        {
-                            "metric": "session_scrapes",
-                            "fields": {"total": 1},
-                            "tags": {"jurisdiction": juris.name, "session": session},
-                        },
-                        {
-                            "metric": "last_session_scrape",
-                            "fields": {"time": int(time.time())},
-                            "tags": {"jurisdiction": juris.name, "session": session},
-                        },
-                    ]
-                )
-            else:
-                stats.write_stats(
-                    [
-                        {
-                            "metric": "non_session_scrapes",
-                            "fields": {"total": 1},
-                            "tags": {"jurisdiction": juris.name},
-                        },
-                        {
-                            "metric": "last_non_session_scrape",
-                            "fields": {"time": int(time.time())},
-                            "tags": {"jurisdiction": juris.name},
-                        },
-                    ]
-                )
-
-    return report
+    return scraper_reports
 
 
-def do_import(juris: State, args: argparse.Namespace) -> dict[str, typing.Any]:
-    # import inside here because to avoid loading Django code unnecessarily
-    from openstates.data.models import Jurisdiction as DatabaseJurisdiction
-    from openstates.importers import (
-        BillImporter,
-        EventImporter,
-        JurisdictionImporter,
-        VoteEventImporter,
-    )
-
+def do_import(state: State, args: argparse.Namespace) -> dict[str, typing.Any]:
     datadir = os.path.join(settings.SCRAPED_DATA_DIR, args.module)
 
-    juris_importer = JurisdictionImporter(juris.jurisdiction_id)
-    bill_importer = BillImporter(juris.jurisdiction_id)
-    vote_event_importer = VoteEventImporter(juris.jurisdiction_id, bill_importer)
-    event_importer = EventImporter(juris.jurisdiction_id, vote_event_importer)
-    report = {}
+    jurisdiction_importer = JurisdictionImporter(state.jurisdiction_id)
+    bill_importer = BillImporter(state.jurisdiction_id)
+    vote_event_importer = VoteEventImporter(state.jurisdiction_id, bill_importer)
+    event_importer = EventImporter(state.jurisdiction_id, vote_event_importer)
+
+    importers: list[BaseImporter] = [
+        jurisdiction_importer,
+        bill_importer,
+        vote_event_importer,
+        event_importer,
+    ]
+
+    import_reports: dict[str, ImportReport] = {}
 
     with transaction.atomic():
-        logger.info("import jurisdictions...")
-        report.update(juris_importer.import_directory(datadir))
-        logger.info("import bills...")
-        report.update(bill_importer.import_directory(datadir))
-        logger.info("import vote events...")
-        report.update(vote_event_importer.import_directory(datadir))
-        logger.info("import events...")
-        report.update(event_importer.import_directory(datadir))
-        DatabaseJurisdiction.objects.filter(id=juris.jurisdiction_id).update(
+        for importer in importers:
+            import_type = importer._type
+            logger.info(f"import {import_type}s...")
+            import_report = importer.import_directory(datadir)
+            import_reports[import_type] = import_report
+
+        Jurisdiction.objects.filter(id=state.jurisdiction_id).update(
             latest_bill_update=datetime.datetime.utcnow()
         )
 
-    # compile info on all sessions that were updated in this run
-    seen_sessions = set()
-    seen_sessions.update(bill_importer.get_seen_sessions())
-    seen_sessions.update(vote_event_importer.get_seen_sessions())
-    for session in seen_sessions:
-        generate_session_report(session)
-
-    return report
+    return import_reports
 
 
 def check_session_list(juris: State) -> set[str]:
@@ -267,184 +186,112 @@ def check_session_list(juris: State) -> set[str]:
                 "{scraper}.ignored_scraped_sessions."
             ).format(sessions=", ".join(unaccounted_sessions), scraper=scraper)
         )
-    stats.write_stats(
-        [
-            {
-                "metric": "sessions",
-                "fields": {"count": len(active_sessions)},
-                "tags": {"jurisdiction": scraper, "session_type": "active"},
-            },
-            {
-                "metric": "sessions",
-                "fields": {"count": len(unaccounted_sessions)},
-                "tags": {"jurisdiction": scraper, "session_type": "unaccounted"},
-            },
-            {
-                "metric": "sessions",
-                "fields": {"count": len(juris.ignored_scraped_sessions)},
-                "tags": {"jurisdiction": scraper, "session_type": "ignored"},
-            },
-        ]
-    )
     return active_sessions
 
 
 def do_update(
-    args: argparse.Namespace, other: list[str], juris: State
-) -> dict[str, typing.Any]:
-    available_scrapers = getattr(juris, "scrapers", {})
-    default_scrapers = getattr(juris, "default_scrapers", None)
-    scrapers: dict[str, dict[str, str]] = {}
+    args: argparse.Namespace,
+    other_args: list[str],
+    state: State,
+) -> list[RunPlan]:
+    available_scrapers = getattr(state, "scrapers", {})
+    default_scrapers = getattr(state, "default_scrapers", None)
+    scraper_args_by_name: dict[str, dict[str, str]] = {}
 
     if not available_scrapers:
         raise CommandError("no scrapers defined on jurisdiction")
 
-    if other:
+    legislative_sessions = []
+    if args.session:
+        legislative_sessions = LegislativeSession.objects.filter(
+            identifier=args.session.strip("'"),
+            jurisdiction_id=state.jurisdiction_id,
+        )
+        if not legislative_sessions:
+            raise CommandError(
+                f"session {args.session} not found in {state.jurisdiction_id}"
+            )
+    else:
+        active_sessions = check_session_list(state)
+        logger.info(
+            f"no session specified. scraping all active sessions: {active_sessions}"
+        )
+        legislative_sessions = LegislativeSession.objects.filter(
+            identifier__in=active_sessions, jurisdiction_id=state.jurisdiction_id
+        )
+        if not legislative_sessions:
+            raise CommandError("no active legislative sessions found")
+
+    if other_args:
         # parse arg list in format: (scraper (k=v)+)+
-        cur_scraper = None
-        for arg in other:
+        scraper_name = None
+        for arg in other_args:
             if "=" in arg:
-                if not cur_scraper:
+                if not scraper_name:
                     raise CommandError("argument {} before scraper name".format(arg))
                 k, v = arg.split("=", 1)
                 v = v.strip("'")
-                scrapers[cur_scraper][k] = v
-            elif arg in juris.scrapers:
-                cur_scraper = arg
-                scrapers[cur_scraper] = {}
+                scraper_args_by_name[scraper_name][k] = v
+            elif arg in state.scrapers:
+                scraper_name = arg
+                scraper_args_by_name[scraper_name] = {}
             else:
                 raise CommandError(
                     "no such scraper: module={} scraper={}".format(args.module, arg)
                 )
     elif default_scrapers is not None:
-        scrapers = {s: {} for s in default_scrapers}
+        scraper_args_by_name = {scraper_name: {} for scraper_name in default_scrapers}
     else:
-        scrapers = {key: {} for key in available_scrapers.keys()}
+        scraper_args_by_name = {
+            scraper_name: {} for scraper_name in available_scrapers.keys()
+        }
 
     # modify args in-place so we can pass them around
     if not args.actions:
         args.actions = ALL_ACTIONS
 
-    if "import" in args.actions:
-        init_django()
-
-    # print the plan
-    report = {
-        "plan": {"module": args.module, "actions": args.actions, "scrapers": scrapers},
-        "start": utils.utcnow(),
-    }
-    print_report(report)
-
-    if "scrape" in args.actions:
-        active_sessions = check_session_list(juris)
-
-    run_plan = None
-    try:
-        if "scrape" in args.actions:
-            report["scrape"] = do_scrape(juris, args, scrapers, active_sessions)
-            stats.write_stats(
-                [
-                    {
-                        "metric": "last_collection_run",
-                        "fields": {"time": int(time.time())},
-                        "tags": {
-                            "jurisdiction": juris.name,
-                            "scrape_type": "scrape",
-                        },
-                    }
-                ]
-            )
-        # we skip import in realtime mode since this happens via the lambda function
-        if "import" in args.actions and not args.realtime:
-            report["import"] = do_import(juris, args)
-            stats.write_stats(
-                [
-                    {
-                        "metric": "last_collection_run",
-                        "fields": {"time": int(time.time())},
-                        "tags": {
-                            "jurisdiction": juris.name,
-                            "scrape_type": "import",
-                        },
-                    }
-                ]
-            )
-        report["success"] = True
-    except Exception as exc:
-        stats.write_stats(
-            [
-                {
-                    "metric": "scraper_failures",
-                    "fields": {"total": 1},
-                    "tags": {
-                        "jurisdiction": juris.name,
-                        "scrapers": ",".join(sorted(args.actions)),
-                    },
-                }
-            ]
+    run_plan_models: list[RunPlan] = []
+    for legislative_session in legislative_sessions:
+        report = Report(
+            jurisdiction_id=state.jurisdiction_id,
+            legislative_session=legislative_session,
+            start=utils.utcnow(),
+            plan=Plan(
+                module=args.module,
+                actions=args.actions,
+                scraper_args_by_name=scraper_args_by_name,
+            ),
         )
-        stats.close()
-        report["success"] = False
-        report["exception"] = exc
-        report["traceback"] = traceback.format_exc()
-        if "import" in args.actions:
-            run_plan = save_report(report, juris.jurisdiction_id)
-        raise
-    else:
-        finish = utils.utcnow()
+        print_report(report)
 
-        for scrape_type, details in report.get("scrape", {}).items():  # type: ignore
-            # datetime - datetime = timedelta object, which has a 'seconds' attribute
-            stats.write_stats(
-                [
-                    {
-                        "metric": "scrape_runtime",
-                        "fields": {"secs": (finish - details["start"]).seconds},
-                        "tags": {
-                            "jurisdiction": juris.name,
-                            "scrape_type": scrape_type,
-                        },
-                    }
-                ]
+        try:
+            if "scrape" in args.actions:
+                report.scraper_reports = do_scrape(
+                    state, legislative_session, args, report.plan.scraper_args_by_name
+                )
+
+            if "import" in args.actions:
+                report.import_reports = do_import(state, args)
+
+            report.success = True
+        except Exception as exc:
+            report.success = False
+            report.exception = exc
+            report.traceback = traceback.format_exc()
+
+        run_plan_model = save_report(report)
+        run_plan_models.append(run_plan_model)
+
+        if report.success:
+            generate_session_data_quality_report(
+                legislative_session=report.legislative_session,
+                run_plan=run_plan_model,
             )
-            for objtype, num in details["objects"].items():
-                stats.write_stats(
-                    [
-                        {
-                            "metric": "objects",
-                            "fields": {"collected": num},
-                            "tags": {
-                                "jurisdiction": juris.name,
-                                "scrape_type": scrape_type,
-                                "object_type": objtype,
-                            },
-                        }
-                    ]
-                )
-
-        for scrape_type, details in report.get("import", {}).items():  # type: ignore
-            for import_type in ["insert", "update", "noop"]:
-                stats.write_stats(
-                    [
-                        {
-                            "metric": "objects",
-                            "fields": {"imported": details[import_type]},
-                            "tags": {
-                                "jurisdiction": juris.name,
-                                "scrape_type": scrape_type,
-                                "import_type": import_type,
-                            },
-                        }
-                    ]
-                )
-
-        if "import" in args.actions:
-            run_plan = save_report(report, juris.jurisdiction_id)
+            publish_os_update_finished(run_plan_model)
 
         print_report(report)
-        if run_plan:
-            publish_os_update_finished(run_plan)
-        return report
+
+    return run_plan_models
 
 
 def parse_args() -> tuple[argparse.Namespace, list[str]]:
@@ -459,8 +306,11 @@ def parse_args() -> tuple[argparse.Namespace, list[str]]:
             "(default is INFO)"
         ),
     )
+
     # what to scrape
     parser.add_argument("module", type=str, help="path to scraper module")
+    parser.add_argument("--session", type=str, help="session to scrape")
+
     for arg in ALL_ACTIONS:
         parser.add_argument(
             "--" + arg,
@@ -516,13 +366,13 @@ def parse_args() -> tuple[argparse.Namespace, list[str]]:
 def main() -> int:
     args, other = parse_args()
 
-    load_civiqa_env()
-    # set log level from command line
-    # handler_level = getattr(logging, args.loglevel.upper(), "INFO")
-    # settings.LOGGING["handlers"]["default"]["level"] = handler_level  # type: ignore
-    # stats.logger.setLevel(handler_level)
+    civiqa_env.load()
 
-    # turn debug on
+    # set log level from command line
+    handler_level = getattr(logging, args.loglevel.upper(), "INFO")
+    settings.LOGGING["handlers"]["default"]["level"] = handler_level  # type: ignore
+    logging.config.dictConfig(settings.LOGGING)
+
     if args.debug:
         try:
             debug_module = importlib.import_module("ipdb")
@@ -550,12 +400,10 @@ def main() -> int:
     with override_settings(settings, overrides):
         report = do_update(args, other, juris)
 
-    stats.close()
-
-    if report.get("success", False):
-        return 0
-    else:
+    if any(not r.success for r in report):
         return 1
+    else:
+        return 0
 
 
 def shutdown_handler(signal: int, _) -> None:
