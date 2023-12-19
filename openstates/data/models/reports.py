@@ -22,11 +22,14 @@ class RunPlan(models.Model):
         Jurisdiction, related_name="runs", on_delete=models.CASCADE
     )
     legislative_session = models.ForeignKey(
-        LegislativeSession, on_delete=models.CASCADE, null=True
+        LegislativeSession,
+        on_delete=models.CASCADE,
+        null=True,
+        related_name="runs",
     )
-    success = models.BooleanField(default=True)
-    start_time = models.DateTimeField()
-    end_time = models.DateTimeField()
+    success = models.BooleanField(default=True, db_index=True)
+    start_time = models.DateTimeField(db_index=True)
+    end_time = models.DateTimeField(db_index=True)
     exception = models.TextField(blank=True, default="")
     traceback = models.TextField(blank=True, default="")
 
@@ -166,7 +169,10 @@ class ScrapedNameMatch(RelatedBase):
 
     class Meta:
         db_table = "opencivicdata_scrapednamematch"
-        unique_together = (("matched_membership", "value"), ("matched_organization", "value"))
+        unique_together = (
+            ("matched_membership", "value"),
+            ("matched_organization", "value"),
+        )
         verbose_name_plural = "scraped name matches"
 
     def __str__(self):
