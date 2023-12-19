@@ -1,8 +1,9 @@
-from django.contrib.postgres.fields import ArrayField
 from django.db import models
+from django.db.models.fields import related
+from openstates.data.models.base import RelatedBase
+from openstates.data.models.people_orgs import Membership, Organization
 
 from .jurisdiction import Jurisdiction, LegislativeSession
-
 
 OBJECT_TYPES = (
     ("jurisdiction", "Jurisdiction"),
@@ -137,3 +138,36 @@ class BillProcessingResult(models.Model):
     succeeded = models.BooleanField(default=True)
     exception = models.TextField(blank=True, default="", null=True)
     created_at = models.DateTimeField(auto_now_add=True)
+
+
+class ScrapedNameMatch(RelatedBase):
+    matched_membership = models.ForeignKey(
+        Membership,
+        related_name="scraped_names",
+        on_delete=models.CASCADE,
+        null=True,
+    )
+    matched_organization = models.ForeignKey(
+        Organization,
+        related_name="sponsorships_scraped_names",
+        on_delete=models.CASCADE,
+        null=True,
+    )
+    legislative_session = models.ForeignKey(
+        LegislativeSession,
+        on_delete=models.CASCADE,
+        related_name="scraped_names",
+    )
+    value = models.CharField(max_length=300, db_index=True)
+    approved = models.BooleanField(default=False)
+
+    vote_ids = models.JSONField(default=list)
+    bill_sponsorship_ids = models.JSONField(default=list)
+
+    class Meta:
+        db_table = "opencivicdata_scrapednamematch"
+        unique_together = (("matched_membership", "value"), ("matched_organization", "value"))
+        verbose_name_plural = "scraped name matches"
+
+    def __str__(self):
+        return f'"{self.value}"'

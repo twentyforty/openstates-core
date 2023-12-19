@@ -11,7 +11,6 @@ from .people_orgs import (
     PersonOffice,
     Post,
     Membership,
-    PersonScrapedNameMatch
 )
 from .bill import (
     Bill,
@@ -46,4 +45,5 @@ from .reports import (
     ScrapeObjects,
     ImportObjects,
     SessionDataQualityReport,
+    ScrapedNameMatch
 )

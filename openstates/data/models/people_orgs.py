@@ -1,7 +1,7 @@
 import datetime
-from enum import unique
 from django.db import models
 from django.db.models import Q, QuerySet
+
 from .base import OCDBase, LinkBase, OCDIDField, RelatedBase, IdentifierBase
 from .division import Division
 from .jurisdiction import Jurisdiction
@@ -410,26 +410,3 @@ class Membership(OCDBase):
 
     def __str__(self):
         return "{} in {} ({})".format(self.person, self.organization, self.role)
-
-
-class PersonScrapedNameMatch(RelatedBase):
-    membership = models.ForeignKey(
-        Membership,
-        related_name="scraped_names",
-        on_delete=models.CASCADE,
-    )
-    organization = models.ForeignKey(
-        Organization,
-        related_name="scraped_names",
-        on_delete=models.CASCADE,
-    )
-    value = models.CharField(max_length=300, db_index=True)
-    vote_ids = models.JSONField(default=list)
-    approved = models.BooleanField(default=False)
-
-    class Meta:
-        db_table = "opencivicdata_personscrapednamematch"
-        unique_together = ("membership", "value")
-
-    def __str__(self):
-        return f"{self.membership} -- {self.value}"
