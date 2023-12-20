@@ -1,7 +1,4 @@
 from django.db import models
-from django.db.models.fields import related
-from openstates.data.models.base import RelatedBase
-from openstates.data.models.people_orgs import Membership, Organization
 
 from .jurisdiction import Jurisdiction, LegislativeSession
 
@@ -106,74 +103,3 @@ class SessionDataQualityReport(models.Model):
 
     class Meta:
         db_table = "pupa_sessiondataqualityreport"
-
-
-class BillProcessingResult(models.Model):
-    run_plan = models.ForeignKey(
-        RunPlan,
-        related_name="bill_processing_results",
-        on_delete=models.CASCADE,
-        null=True,
-    )
-    legislative_session = models.ForeignKey(
-        LegislativeSession, on_delete=models.CASCADE, null=True
-    )
-    processed_static_fields_bill_count = models.PositiveIntegerField(
-        null=True, default=None
-    )
-    processed_tags_bill_count = models.PositiveIntegerField(null=True, default=None)
-    processed_dynamic_fields_bill_count = models.PositiveIntegerField(
-        null=True, default=None
-    )
-    processed_progress_dates_bill_count = models.PositiveIntegerField(
-        null=True, default=None
-    )
-    processed_support_bill_count = models.PositiveIntegerField(null=True, default=None)
-    updated_gsheet_tracker_bill_count = models.PositiveIntegerField(
-        null=True, default=None
-    )
-    stats_calculated_legislative_session_count = models.PositiveIntegerField(
-        null=True, default=None
-    )
-    legislative_sessions_processed_count = models.PositiveIntegerField(
-        null=True, default=None
-    )
-    succeeded = models.BooleanField(default=True)
-    exception = models.TextField(blank=True, default="", null=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-
-
-class ScrapedNameMatch(RelatedBase):
-    matched_membership = models.ForeignKey(
-        Membership,
-        related_name="scraped_names",
-        on_delete=models.CASCADE,
-        null=True,
-    )
-    matched_organization = models.ForeignKey(
-        Organization,
-        related_name="sponsorships_scraped_names",
-        on_delete=models.CASCADE,
-        null=True,
-    )
-    legislative_session = models.ForeignKey(
-        LegislativeSession,
-        on_delete=models.CASCADE,
-        related_name="scraped_names",
-    )
-    value = models.CharField(max_length=300, db_index=True)
-    approved = models.BooleanField(default=False)
-
-    vote_ids = models.JSONField(default=list)
-    bill_sponsorship_ids = models.JSONField(default=list)
-
-    class Meta:
-        db_table = "opencivicdata_scrapednamematch"
-        unique_together = (
-            ("matched_membership", "value"),
-            ("matched_organization", "value"),
-        )
-        verbose_name_plural = "scraped name matches"
-
-    def __str__(self):
-        return f'"{self.value}"'

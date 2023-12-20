@@ -45,5 +45,4 @@ from .reports import (
     ScrapeObjects,
     ImportObjects,
     SessionDataQualityReport,
-    ScrapedNameMatch
 )
