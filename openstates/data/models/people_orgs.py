@@ -1,6 +1,6 @@
 import datetime
 from django.db import models
-from django.db.models import Q, QuerySet
+from django.db.models import Q, QuerySet, constraints
 
 from .base import OCDBase, LinkBase, OCDIDField, RelatedBase, IdentifierBase
 from .division import Division
@@ -281,6 +281,12 @@ class PersonName(RelatedBase):
 
     class Meta:
         db_table = "opencivicdata_personname"
+        constraints = [
+            constraints.UniqueConstraint(
+                fields=["name", "start_date", "end_date", "person_id"],
+                name="unique_personname",
+            )
+        ]
 
     def __str__(self):
         return "{} ({})".format(self.name, self.note)

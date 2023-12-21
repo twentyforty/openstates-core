@@ -579,10 +579,6 @@ class BaseImporter:
                 Q(name__iexact=name)
                 | Q(other_names__name__iexact=name)
                 | Q(family_name__iexact=name)
-                | Q(
-                    memberships__scraped_names__value__iexact=name,
-                    memberships__scraped_names__approved=True,
-                )
             )
         else:
             spec = Q(**spec)
