@@ -8,6 +8,7 @@ from django.db.models import Q, Model
 from django.db.models.signals import post_save
 
 from openstates.cli.reports import ImportReport
+from openstates.data.models.people_orgs import PersonName
 from .. import settings
 from ..data.models import LegislativeSession, Person, Bill
 from ..exceptions import DuplicateItemError, UnresolvedIdError, DataImportError
@@ -130,6 +131,7 @@ class BaseImporter:
         self.duplicates: dict[str, str] = {}
         self.pseudo_id_cache: dict[str, typing.Optional[_ID]] = {}
         self.person_cache: dict[_PersonCacheKey, typing.Optional[str]] = {}
+        self.scraped_name_match_ids: dict[str, int] = {}
         self.session_cache: dict[str, LegislativeSession] = {}
         self.logger = logging.getLogger("openstates")
         self.info = self.logger.info
@@ -559,6 +561,24 @@ class BaseImporter:
     def get_seen_sessions(self) -> list[str]:
         return [s.id for s in self.session_cache.values()]
 
+    def get_person_cache_key(
+        psuedo_person_id: str,
+        start_date: typing.Optional[str] = None,
+        end_date: typing.Optional[str] = None,
+    ):
+        return (psuedo_person_id, start_date, end_date)
+
+    def resolve_scraped_name_match_id(
+        self,
+        psuedo_person_id: str,
+        start_date: typing.Optional[str] = None,
+        end_date: typing.Optional[str] = None,
+    ) -> typing.Optional[int]:
+        cache_key = self.get_person_cache_key(
+            psuedo_person_id, start_date=start_date, end_date=end_date
+        )
+        return self.scraped_name_match_ids.get(cache_key)
+
     def resolve_person(
         self,
         psuedo_person_id: str,
@@ -566,19 +586,20 @@ class BaseImporter:
         end_date: typing.Optional[str] = None,
         org_classification: typing.Optional[str] = None,
     ) -> str:
-        cache_key = (psuedo_person_id, start_date, end_date)
+        cache_key = self.get_person_cache_key(
+            psuedo_person_id, start_date=start_date, end_date=end_date
+        )
         if cache_key in self.person_cache:
             return self.person_cache[cache_key]
 
         # turn spec into DB query
         spec = get_pseudo_id(psuedo_person_id)
+        scraped_name_value: str = None
         if list(spec.keys()) == ["name"]:
             # if we're just resolving on name, include other names and family name
-            name = spec["name"]
-            spec = (
-                Q(name__iexact=name)
-                | Q(other_names__name__iexact=name)
-                | Q(family_name__iexact=name)
+            scraped_name_value = spec["name"]
+            spec = Q(name__iexact=scraped_name_value) | Q(
+                family_name__iexact=scraped_name_value
             )
         else:
             spec = Q(**spec)
@@ -613,12 +634,25 @@ class BaseImporter:
                 memberships__start_date__lt=end_date
             )
 
-        ids = set(Person.objects.filter(spec).values_list("id", flat=True))
-        if len(ids) == 1:
-            self.person_cache[cache_key] = ids.pop()
-            errmsg = None
-        elif not ids:
-            errmsg = "no people returned for spec"
+        errmsg = None
+        matched_persons = Person.objects.filter(spec)
+        
+        if matched_persons.count() == 1:
+            self.person_cache[cache_key] = matched_persons.first().id
+        elif not matched_persons.exists():
+            spec |= Q(other_names__iexact=scraped_name_value)
+            matched_persons = Person.objects.filter(spec).prefetch_related(
+                "other_names"
+            )
+            if matched_persons.count() == 1:
+                matched_person = matched_persons.first()
+                for other_name in matched_person.other_names.all():
+                    if other_name.name.lower() == scraped_name_value.lower():
+                        self.scraped_name_match_ids[cache_key] = matched_person.id
+                        break
+                self.person_cache[cache_key] = matched_person.id
+            else:
+                errmsg = "no people returned for spec"
         else:
             errmsg = "multiple people returned for spec"
 

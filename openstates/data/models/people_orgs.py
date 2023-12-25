@@ -278,6 +278,7 @@ class PersonName(RelatedBase):
         on_delete=models.CASCADE,
         help_text="A link to the Person connected to this alternative name.",
     )
+    scraped_name_match_id = models.PositiveIntegerField(null=True)
 
     class Meta:
         db_table = "opencivicdata_personname"

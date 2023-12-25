@@ -17,7 +17,9 @@ class VoteEventImporter(BaseImporter):
         "sources": (VoteSource, "vote_event_id", {}),
     }
 
-    def __init__(self, jurisdiction_id: str, bill_importer: BillImporter, do_postimport=True):
+    def __init__(
+        self, jurisdiction_id: str, bill_importer: BillImporter, do_postimport=True
+    ):
         super(VoteEventImporter, self).__init__(jurisdiction_id, do_postimport)
         self.org_importer = OrganizationImporter(jurisdiction_id)
         self.bill_importer = bill_importer
@@ -116,9 +118,14 @@ class VoteEventImporter(BaseImporter):
                 )
 
         for vote in data["votes"]:
-            vote["voter_id"] = self.resolve_person(
-                vote["voter_id"], session.start_date, session.end_date
-            )
+            filter = {
+                "psuedo_person_id": vote["voter_id"],
+                "start_date": session.start_date,
+                "end_date": session.end_date,
+            }
+            vote["voter_id"] = self.resolve_person(**filter)
+            vote["scraped_name_match_id"] = self.resolve_scraped_name_match_id(**filter)
+
         return data
 
     def postimport(self) -> None:
