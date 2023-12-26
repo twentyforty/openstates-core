@@ -299,7 +299,8 @@ class OtherName(RelatedBase):
                 name="unique_orgname",
             ),
             constraints.CheckConstraint(
-                check=Q(person_id__isnull=True) ^ Q(organization_id__isnull=True),
+                check=Q(person_id__isnull=True, organization_id__isnull=False)
+                | Q(person_id__isnull=False, organization_id__isnull=True),
                 name="personname_xor_orgname",
             ),
         ]
