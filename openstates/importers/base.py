@@ -8,7 +8,7 @@ from django.db.models import Q, Model
 from django.db.models.signals import post_save
 
 from openstates.cli.reports import ImportReport
-from openstates.data.models.people_orgs import PersonName
+from openstates.data.models.people_orgs import OtherName
 from .. import settings
 from ..data.models import LegislativeSession, Person, Bill
 from ..exceptions import DuplicateItemError, UnresolvedIdError, DataImportError

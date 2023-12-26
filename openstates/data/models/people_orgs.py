@@ -42,7 +42,6 @@ class Organization(OCDBase):
     )
     sources = models.JSONField(default=list, blank=True)
     links = models.JSONField(default=list, blank=True)
-    other_names = models.JSONField(default=list, blank=True)
 
     def __str__(self):
         return self.name
@@ -228,7 +227,7 @@ class Person(OCDBase):
         verbose_name_plural = "people"
 
     def add_other_name(self, name, note=""):
-        PersonName.objects.create(name=name, note=note, person_id=self.id)
+        OtherName.objects.create(name=name, note=note, person_id=self.id)
 
 
 class PersonIdentifier(IdentifierBase):
@@ -247,7 +246,7 @@ class PersonIdentifier(IdentifierBase):
         db_table = "opencivicdata_personidentifier"
 
 
-class PersonName(RelatedBase):
+class OtherName(RelatedBase):
     """
     Alternate or former name of a Person.
     """
@@ -275,8 +274,16 @@ class PersonName(RelatedBase):
     person = models.ForeignKey(
         Person,
         related_name="other_names",
+        null=True,
         on_delete=models.CASCADE,
         help_text="A link to the Person connected to this alternative name.",
+    )
+    organization = models.ForeignKey(
+        Organization,
+        related_name="other_names",
+        null=True,
+        on_delete=models.CASCADE,
+        help_text="A link to the Organization connected to this alternative name.",
     )
     scraped_name_match_id = models.PositiveIntegerField(null=True)
 
@@ -286,7 +293,15 @@ class PersonName(RelatedBase):
             constraints.UniqueConstraint(
                 fields=["name", "start_date", "end_date", "person_id"],
                 name="unique_personname",
-            )
+            ),
+            constraints.UniqueConstraint(
+                fields=["name", "start_date", "end_date", "organization_id"],
+                name="unique_orgname",
+            ),
+            constraints.CheckConstraint(
+                check=Q(person_id__isnull=True) ^ Q(organization_id__isnull=True),
+                name="personname_xor_orgname",
+            ),
         ]
 
     def __str__(self):

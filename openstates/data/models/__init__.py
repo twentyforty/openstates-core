@@ -5,7 +5,7 @@ from .people_orgs import (
     Organization,
     Person,
     PersonIdentifier,
-    PersonName,
+    OtherName,
     PersonLink,
     PersonSource,
     PersonOffice,
