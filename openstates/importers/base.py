@@ -4,7 +4,7 @@ import glob
 import json
 import logging
 import typing
-from django.db.models import Q, Model
+from django.db.models import Q, Model, QuerySet
 from django.db.models.signals import post_save
 
 from openstates.cli.reports import ImportReport
@@ -561,39 +561,29 @@ class BaseImporter:
     def get_seen_sessions(self) -> list[str]:
         return [s.id for s in self.session_cache.values()]
 
-    def get_person_cache_key(
-        psuedo_person_id: str,
-        start_date: typing.Optional[str] = None,
-        end_date: typing.Optional[str] = None,
-    ):
-        return (psuedo_person_id, start_date, end_date)
 
     def resolve_scraped_name_match_id(
         self,
-        psuedo_person_id: str,
+        pseudo_person_id: str,
         start_date: typing.Optional[str] = None,
         end_date: typing.Optional[str] = None,
     ) -> typing.Optional[int]:
-        cache_key = self.get_person_cache_key(
-            psuedo_person_id, start_date=start_date, end_date=end_date
-        )
+        cache_key = (pseudo_person_id, start_date, end_date)
         return self.scraped_name_match_ids.get(cache_key)
 
     def resolve_person(
         self,
-        psuedo_person_id: str,
+        pseudo_person_id: str,
         start_date: typing.Optional[str] = None,
         end_date: typing.Optional[str] = None,
         org_classification: typing.Optional[str] = None,
     ) -> str:
-        cache_key = self.get_person_cache_key(
-            psuedo_person_id, start_date=start_date, end_date=end_date
-        )
+        cache_key = (pseudo_person_id, start_date, end_date)
         if cache_key in self.person_cache:
             return self.person_cache[cache_key]
 
         # turn spec into DB query
-        spec = get_pseudo_id(psuedo_person_id)
+        spec = get_pseudo_id(pseudo_person_id)
         scraped_name_value: str = None
         if list(spec.keys()) == ["name"]:
             # if we're just resolving on name, include other names and family name
@@ -636,19 +626,20 @@ class BaseImporter:
 
         errmsg = None
         matched_persons = Person.objects.filter(spec)
-        
+
         if matched_persons.count() == 1:
             self.person_cache[cache_key] = matched_persons.first().id
         elif not matched_persons.exists():
             spec |= Q(other_names__iexact=scraped_name_value)
-            matched_persons = Person.objects.filter(spec).prefetch_related(
-                "other_names"
-            )
+            matched_persons = Person.objects.filter(spec)
             if matched_persons.count() == 1:
                 matched_person = matched_persons.first()
-                for other_name in matched_person.other_names.all():
+                other_names = OtherName.objects.filter(person_id=matched_person.id)
+                for other_name in other_names:
                     if other_name.name.lower() == scraped_name_value.lower():
-                        self.scraped_name_match_ids[cache_key] = matched_person.id
+                        self.scraped_name_match_ids[
+                            cache_key
+                        ] = other_name.scraped_name_match_id
                         break
                 self.person_cache[cache_key] = matched_person.id
             else:

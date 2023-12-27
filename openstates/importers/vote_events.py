@@ -77,7 +77,7 @@ class VoteEventImporter(BaseImporter):
 
         bill = data.pop("bill")
         if bill and bill.startswith("~"):
-            # unpack psuedo id and apply filter in case there are any that alter it
+            # unpack pseudo id and apply filter in case there are any that alter it
             bill = get_pseudo_id(bill)
             self.bill_importer.apply_transformers(bill)
             bill = _make_pseudo_id(**bill)
@@ -119,7 +119,7 @@ class VoteEventImporter(BaseImporter):
 
         for vote in data["votes"]:
             filter = {
-                "psuedo_person_id": vote["voter_id"],
+                "pseudo_person_id": vote["voter_id"],
                 "start_date": session.start_date,
                 "end_date": session.end_date,
             }

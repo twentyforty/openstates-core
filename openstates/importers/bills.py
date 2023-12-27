@@ -99,7 +99,7 @@ class BillImporter(BaseImporter):
             if sponsor.get("person_id"):
                 filter = {
                     "pseudo_person_id": sponsor["person_id"],
-                    "start_data": session.start_date,
+                    "start_date": session.start_date,
                     "end_date": session.end_date,
                 }
                 sponsor["person_id"] = self.resolve_person(**filter)
