@@ -642,8 +642,10 @@ class BaseImporter:
                         ] = other_name.scraped_name_match_id
                         break
                 self.person_cache[cache_key] = matched_person.id
-            else:
+            elif matched_persons.count() == 0:
                 errmsg = "no people returned for spec"
+            else:
+                errmsg = "multiple people returned for spec"
         else:
             errmsg = "multiple people returned for spec"
 
