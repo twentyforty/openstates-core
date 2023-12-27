@@ -164,12 +164,6 @@ class BillSponsorship(RelatedEntityBase):
     primary = models.BooleanField(default=False)
     classification = models.CharField(max_length=100)  # enum?
     scraped_name_match_id = models.PositiveIntegerField(null=True)
-    person_organization = models.ForeignKey(
-        "data.Organization",
-        null=True,
-        on_delete=models.SET_NULL,
-        related_name="person_sponsorships",
-    )
 
     def __str__(self):
         return "{} ({}) sponsorship of {}".format(

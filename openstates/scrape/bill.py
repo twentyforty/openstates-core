@@ -123,22 +123,13 @@ class Bill(SourceMixin, AssociatedLinkMixin, BaseModel):
             "primary": primary,
             # set these so that all JSON objects have the same keys, prevents import errors
             "person_id": None,
-            "person_organization_id": None,
             "organization_id": None,
         }
         # overwrite the id that exists
         if entity_type:
             if not entity_id:
                 entity_id = _make_pseudo_id(name=name)
-            if entity_type == "person":
-                sp["person_id"] = entity_id
-                if chamber:
-                    sp["person_organization_id"] = pseudo_organization(
-                        None, chamber, None
-                    )
-            elif entity_type == "organization":
-                sp["organization_id"] = entity_id
-
+            sp[entity_type + "_id"] = entity_id
         if sp in self.sponsorships:
             warnings.warn(f"duplicate sponsor {sp}", RuntimeWarning)
         self.sponsorships.append(sp)
