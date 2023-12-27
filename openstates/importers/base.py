@@ -630,7 +630,7 @@ class BaseImporter:
         if matched_persons.count() == 1:
             self.person_cache[cache_key] = matched_persons.first().id
         elif not matched_persons.exists():
-            spec |= Q(other_names__iexact=scraped_name_value)
+            spec |= Q(other_names__name__iexact=scraped_name_value)
             matched_persons = Person.objects.filter(spec)
             if matched_persons.count() == 1:
                 matched_person = matched_persons.first()
