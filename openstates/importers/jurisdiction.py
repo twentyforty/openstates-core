@@ -19,4 +19,6 @@ class JurisdictionImporter(BaseImporter):
     def prepare_for_db(self, data: _JsonDict) -> _JsonDict:
         for s in data["legislative_sessions"]:
             s.pop("_scraped_name", None)
+            if "active" not in s:
+                s["active"] = False
         return data
