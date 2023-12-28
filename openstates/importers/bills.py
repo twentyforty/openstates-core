@@ -111,6 +111,11 @@ class BillImporter(BaseImporter):
                 sponsor["organization_id"] = self.org_importer.resolve_json_id(
                     sponsor["organization_id"], allow_no_match=True
                 )
+            
+            if sponsor.get("chamber_id"):
+                sponsor["chamber_id"] = self.org_importer.resolve_json_id(
+                    sponsor["chamber_id"], allow_no_match=True
+                )
 
         return data
 
