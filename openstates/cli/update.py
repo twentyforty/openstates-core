@@ -132,7 +132,6 @@ def do_import(state: State, args: argparse.Namespace) -> dict[str, typing.Any]:
     event_importer = EventImporter(state.jurisdiction_id, vote_event_importer)
 
     importers: list[BaseImporter] = [
-        jurisdiction_importer,
         bill_importer,
         vote_event_importer,
         event_importer,
@@ -140,12 +139,18 @@ def do_import(state: State, args: argparse.Namespace) -> dict[str, typing.Any]:
 
     import_reports: dict[str, ImportReport] = {}
 
+    def do_importer(importer: BaseImporter) -> None:
+        import_type = importer._type
+        logger.info(f"import {import_type}s...")
+        import_report = importer.import_directory(datadir)
+        import_reports[import_type] = import_report
+
+    # do jurisdiction first
+    do_importer(jurisdiction_importer)
+
     with transaction.atomic():
         for importer in importers:
-            import_type = importer._type
-            logger.info(f"import {import_type}s...")
-            import_report = importer.import_directory(datadir)
-            import_reports[import_type] = import_report
+            do_importer(importer)
 
         Jurisdiction.objects.filter(id=state.jurisdiction_id).update(
             latest_bill_update=datetime.datetime.utcnow()

@@ -70,7 +70,9 @@ def items_differ(
 
     original_jsonitems = jsonitems
     jsonitems = copy.deepcopy(jsonitems)
-    keys = jsonitems[0].keys()
+    keys = set()
+    for jsonitem in jsonitems:
+        keys.update(jsonitem.keys())
 
     # go over dbitems looking for matches
     for dbitem in dbitems:
@@ -412,6 +414,7 @@ class BaseImporter:
         # keep track of whether or not anything was updated
         updated_fields = []
         # for each related field - check if there are differences
+
         for field, items in related.items():
             # get items from database
             dbitems = list(getattr(obj, field).all())
