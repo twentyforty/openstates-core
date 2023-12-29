@@ -9,6 +9,7 @@ import contextlib
 import datetime
 import glob
 import importlib
+import inspect
 import logging
 import os
 import signal
@@ -116,9 +117,14 @@ def do_scrape(
             fastmode=args.fastmode,
             realtime=args.realtime,
         )
-        scraper_reports[scraper_name] = scraper.do_scrape(
-            **scraper_args, session=legislative_session.identifier
-        )
+
+        if (
+            "session" in inspect.getargspec(ScraperClass.scrape).args
+            and "session" not in scraper_args
+        ):
+            scraper_args["session"] = legislative_session.identifier
+
+        scraper_reports[scraper_name] = scraper.do_scrape(**scraper_args)
 
     return scraper_reports
 
