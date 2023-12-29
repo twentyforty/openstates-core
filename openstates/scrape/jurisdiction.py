@@ -37,7 +37,7 @@ class State(BaseModel):
 
     # non-db properties
     scrapers = {}
-    default_scrapers = None
+    default_scrapers = ["bills"]
     ignored_scraped_sessions = []
     _metadata = None
 
