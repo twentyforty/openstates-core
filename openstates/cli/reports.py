@@ -1,23 +1,10 @@
 import datetime
-from typing import Optional
+from typing import Any, Optional
 import logging
 from attr import dataclass
+
 from django.db import transaction
 from django.db.models import Count, Model, Subquery, OuterRef, Q, F
-
-from openstates.data.models import (
-    LegislativeSession,
-    RunPlan,
-    ScrapeObjects,
-    ScrapeReport,
-    Bill,
-    VoteEvent,
-    VoteCount,
-    PersonVote,
-    BillSponsorship,
-    SessionDataQualityReport,
-)
-from openstates.data.models.reports import ImportObjects
 
 
 from .. import utils
@@ -55,7 +42,7 @@ class Plan:
 @dataclass
 class Report:
     jurisdiction_id: str
-    legislative_session: LegislativeSession
+    legislative_session: Any
     plan: Plan
     start: datetime.datetime
     exception: str = ""
@@ -93,7 +80,15 @@ def print_report(report: Report) -> None:
 
 
 @transaction.atomic
-def save_report(report: Report) -> RunPlan:
+def save_report(report: Report) -> Any:
+
+    from openstates.data.models import (
+        RunPlan,
+        ScrapeObjects,
+        ScrapeReport,
+    )
+    from openstates.data.models.reports import ImportObjects
+
     report.end = utils.utcnow()
 
     run_plan_model = RunPlan.objects.create(
@@ -146,7 +141,7 @@ def save_report(report: Report) -> RunPlan:
 
 
 def _simple_count(
-    ModelClass: Model, legislatve_session: LegislativeSession, **filter
+    ModelClass: Model, legislatve_session: Any, **filter
 ) -> int:
     return (
         ModelClass.objects.filter(legislative_session=legislatve_session)
@@ -156,8 +151,19 @@ def _simple_count(
 
 
 def generate_session_data_quality_report(
-    legislative_session: LegislativeSession, run_plan: RunPlan = None
-) -> SessionDataQualityReport:
+    legislative_session: Any, run_plan: Any = None
+) -> Any:
+    
+    from openstates.data.models import (
+        Bill,
+        VoteEvent,
+        VoteCount,
+        PersonVote,
+        BillSponsorship,
+        SessionDataQualityReport,
+    )
+
+
     report = SessionDataQualityReport(
         legislative_session=legislative_session,
         run_plan=run_plan,
