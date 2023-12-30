@@ -19,6 +19,7 @@ import typing
 from types import ModuleType
 
 from django.db import transaction
+from django.utils import timezone
 from openstates import settings, utils
 from openstates.civiqa import civiqa_env
 from openstates.civiqa.publisher import publish_os_update_finished
@@ -104,6 +105,7 @@ def do_scrape(
         fastmode=args.fastmode,
         realtime=args.realtime,
     )
+
     scraper_reports["jurisdiction"] = jurisdiction_scraper.do_scrape()
 
     for scraper_name, scraper_args in scraper_args_by_name.items():
@@ -252,7 +254,7 @@ def do_update(
                     "no such scraper: module={} scraper={}".format(args.module, arg)
                 )
 
-    runs = []    
+    runs = []
     if scraper_args_by_name:
         # if the cmd line specified scrapers, only run those
         runs = [list(scraper_args_by_name.keys())]
@@ -283,7 +285,7 @@ def do_update(
             report = Report(
                 jurisdiction_id=state.jurisdiction_id,
                 legislative_session=legislative_session,
-                start=utils.utcnow(),
+                start=timezone.now(),
                 plan=Plan(
                     module=args.module,
                     actions=args.actions,
@@ -292,10 +294,18 @@ def do_update(
             )
             print_report(report)
 
+            # put empty reports so they show up if there's an exception
+            report.scraper_reports = {
+                scraper_name: ScraperReport()
+                for scraper_name in run
+            }
             try:
                 if "scrape" in args.actions:
                     report.scraper_reports = do_scrape(
-                        state, legislative_session, args, report.plan.scraper_args_by_name
+                        state,
+                        legislative_session,
+                        args,
+                        report.plan.scraper_args_by_name,
                     )
 
                 if "import" in args.actions:
@@ -310,7 +320,7 @@ def do_update(
             run_plan_model = save_report(report)
             run_plan_models.append(run_plan_model)
 
-            if report.success:
+            if report.success and "bills" in run:
                 generate_session_data_quality_report(
                     legislative_session=report.legislative_session,
                     run_plan=run_plan_model,

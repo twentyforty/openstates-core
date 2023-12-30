@@ -41,8 +41,8 @@ class ScrapeReport(models.Model):
         LegislativeSession, on_delete=models.CASCADE, null=True
     )
     args = models.CharField(max_length=300)
-    start_time = models.DateTimeField()
-    end_time = models.DateTimeField()
+    start_time = models.DateTimeField(null=True)
+    end_time = models.DateTimeField(null=True)
 
     class Meta:
         db_table = "pupa_scrapereport"
