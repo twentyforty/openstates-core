@@ -1,3 +1,4 @@
+from enum import unique
 from django.db import models
 
 from .jurisdiction import Jurisdiction, LegislativeSession
@@ -24,9 +25,9 @@ class RunPlan(models.Model):
         null=True,
         related_name="runs",
     )
-    success = models.BooleanField(default=True, db_index=True)
-    start_time = models.DateTimeField(db_index=True)
-    end_time = models.DateTimeField(db_index=True)
+    success = models.BooleanField(default=False, db_index=True, null=True)
+    start_time = models.DateTimeField(db_index=True, null=True)
+    end_time = models.DateTimeField(db_index=True, null=True)
     exception = models.TextField(blank=True, default="")
     traceback = models.TextField(blank=True, default="")
 
@@ -46,6 +47,7 @@ class ScrapeReport(models.Model):
 
     class Meta:
         db_table = "pupa_scrapereport"
+        unique_together = ("plan", "scraper")
 
 
 class ScrapeObjects(models.Model):

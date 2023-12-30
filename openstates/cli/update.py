@@ -19,7 +19,6 @@ import typing
 from types import ModuleType
 
 from django.db import transaction
-from django.utils import timezone
 from openstates import settings, utils
 from openstates.civiqa import civiqa_env
 from openstates.civiqa.publisher import publish_os_update_finished
@@ -285,7 +284,7 @@ def do_update(
             report = Report(
                 jurisdiction_id=state.jurisdiction_id,
                 legislative_session=legislative_session,
-                start=timezone.now(),
+                start=utils.utcnow(),
                 plan=Plan(
                     module=args.module,
                     actions=args.actions,
@@ -294,11 +293,8 @@ def do_update(
             )
             print_report(report)
 
-            # put empty reports so they show up if there's an exception
-            report.scraper_reports = {
-                scraper_name: ScraperReport()
-                for scraper_name in run
-            }
+            # save the pending report
+            run_plan_model = save_report(report)
             try:
                 if "scrape" in args.actions:
                     report.scraper_reports = do_scrape(
@@ -317,7 +313,8 @@ def do_update(
                 report.exception = exc
                 report.traceback = traceback.format_exc()
 
-            run_plan_model = save_report(report)
+            report.end = utils.utcnow()
+            run_plan_model = save_report(report, run_plan_model)
             run_plan_models.append(run_plan_model)
 
             if report.success and "bills" in run:

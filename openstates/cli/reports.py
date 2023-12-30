@@ -80,7 +80,7 @@ def print_report(report: Report) -> None:
 
 
 @transaction.atomic
-def save_report(report: Report) -> Any:
+def save_report(report: Report, run_plan_model=None) -> Any:
 
     from openstates.data.models import (
         RunPlan,
@@ -88,43 +88,46 @@ def save_report(report: Report) -> Any:
         ScrapeReport,
     )
     from openstates.data.models.reports import ImportObjects
+    run_plan_model: RunPlan = run_plan_model
 
-    report.end = utils.utcnow()
+    if not run_plan_model:
+        run_plan_model = RunPlan.objects.create(
+            jurisdiction_id=report.jurisdiction_id,
+            legislative_session=report.legislative_session,
+            start_time=report.start
+        )
+    else:
+        run_plan_model.success = report.success
+        run_plan_model.end_time = report.end
+        run_plan_model.exception = report.exception
+        run_plan_model.traceback = report.traceback
+        run_plan_model.save()
 
-    run_plan_model = RunPlan.objects.create(
-        jurisdiction_id=report.jurisdiction_id,
-        legislative_session=report.legislative_session,
-        success=report.success,
-        start_time=report.start,
-        end_time=report.end,
-        exception=report.exception,
-        traceback=report.traceback,
-    )
-
-    for scraper_name, scrape_report in report.scraper_reports.items():
+    for scraper_name, args in report.plan.scraper_args_by_name.items():
         scraper_args = ""
-        for arg, value in report.plan.scraper_args_by_name.get(
-            scraper_name, {}
-        ).items():
+        for arg, value in args.items():
             if " " in value:
                 value = f"'{value}'"
             scraper_args += f"{arg}={value} "
 
-        scrape_report_model = ScrapeReport.objects.create(
+        scraper_report = report.scraper_reports.get(scraper_name)
+        scrape_report_model, _ = ScrapeReport.objects.update_or_create(
             plan=run_plan_model,
             scraper=scraper_name,
             legislative_session=report.legislative_session,
-            args=scraper_args,
-            start_time=scrape_report.start,
-            end_time=scrape_report.end,
+            defaults=dict(
+                args=scraper_args,
+                start_time=scraper_report.start if scraper_report else None,
+                end_time=scraper_report.end if scraper_report else None,
+            ),
         )
+        if scraper_report:
+            for object_type, count in scraper_report.objects.items():
+                ScrapeObjects.objects.create(
+                    report=scrape_report_model, object_type=object_type, count=count
+                )
 
-        for object_type, count in scrape_report.objects.items():
-            ScrapeObjects.objects.create(
-                report=scrape_report_model, object_type=object_type, count=count
-            )
-
-    for importer_type, import_report in report.import_reports.items():
+    for importer_type, import_report in (report.import_reports or {}).items():
         if import_report.insert or import_report.update or import_report.noop:
             ImportObjects.objects.create(
                 plan=run_plan_model,
