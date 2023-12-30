@@ -233,6 +233,7 @@ def do_update(
         if not legislative_sessions:
             raise CommandError("no active legislative sessions found")
 
+    scraper_args_by_name = {}
     if other_args:
         # parse arg list in format: (scraper (k=v)+)+
         scraper_name = None
@@ -250,20 +251,24 @@ def do_update(
                 raise CommandError(
                     "no such scraper: module={} scraper={}".format(args.module, arg)
                 )
+
+    runs = []    
+    if scraper_args_by_name:
+        # if the cmd line specified scrapers, only run those
+        runs = [list(scraper_args_by_name.keys())]
     else:
         scraper_args_by_name = {scraper_name: {} for scraper_name in available_scrapers}
-    
-    runs = []    
-    if default_scrapers is not None:
-        runs.append(default_scrapers)
-        rest_run = []
-        for scraper_name in available_scrapers:
-            if scraper_name not in default_scrapers:
-                rest_run.append(scraper_name)
-        if rest_run:
-            runs.append(rest_run)
-    else:
-        runs = [list(available_scrapers.keys())]
+        # prefer default_scrapers as they're own run
+        if default_scrapers:
+            runs = [default_scrapers]
+            rest = []
+            for scraper_name in available_scrapers:
+                if scraper_name not in default_scrapers:
+                    rest.append(scraper_name)
+            if rest:
+                runs.append(rest)
+        else:
+            runs = [list(available_scrapers.keys())]
 
     # modify args in-place so we can pass them around
     if not args.actions:
