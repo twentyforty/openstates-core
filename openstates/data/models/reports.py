@@ -100,6 +100,7 @@ class SessionDataQualityReport(models.Model):
     # these fields store lists of names mapped to numbers of occurances
     unmatched_sponsor_people = models.JSONField()
     unmatched_sponsor_organizations = models.JSONField()
+    unmatched_sponsorships = models.JSONField()
     unmatched_voters = models.JSONField()
     created_at = models.DateTimeField(auto_now_add=True)
 

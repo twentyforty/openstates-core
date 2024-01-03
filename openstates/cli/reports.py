@@ -7,8 +7,6 @@ from django.db import transaction
 from django.db.models import Count, Model, Subquery, OuterRef, Q, F
 
 
-from .. import utils
-
 # model imports are inside functions since this file is imported pre-init
 
 logger = logging.getLogger("openstates")
@@ -234,25 +232,15 @@ def generate_session_data_quality_report(
     queryset = (
         BillSponsorship.objects.filter(
             bill__legislative_session=legislative_session,
-            entity_type="person",
             person_id=None,
+            organization_id=None,
         )
         .values("name")
         .annotate(num=Count("name"))
     )
-    report.unmatched_sponsor_people = {item["name"]: item["num"] for item in queryset}
-    queryset = (
-        BillSponsorship.objects.filter(
-            bill__legislative_session=legislative_session,
-            entity_type="organization",
-            person_id=None,
-        )
-        .values("name")
-        .annotate(num=Count("name"))
-    )
-    report.unmatched_sponsor_organizations = {
-        item["name"]: item["num"] for item in queryset
-    }
+    report.unmatched_sponsorships = {item["name"]: item["num"] for item in queryset}
+    report.unmatched_sponsor_organizations = {}
+    report.unmatched_sponsor_people = {}
     queryset = (
         PersonVote.objects.filter(
             vote_event__legislative_session=legislative_session,
