@@ -1,5 +1,6 @@
 import datetime
 import importlib
+import inspect
 import json
 import jsonschema
 import logging
@@ -177,6 +178,17 @@ class Scraper(scrapelib.Scraper):
             objects=defaultdict(int),
         )
         self.output_names = defaultdict(set)
+
+        if (
+            "session" in inspect.getargspec(self.scrape).args
+            and "session" not in kwargs
+        ):
+            kwargs["session"] = (
+                self.legislative_session.identifier
+                if self.legislative_session
+                else None
+            )
+
         try:
             for obj in self.scrape(**kwargs) or []:
                 # allow for returning empty objects in a list

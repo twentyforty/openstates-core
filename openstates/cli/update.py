@@ -96,17 +96,6 @@ def do_scrape(
 
     scraper_reports: dict[str, ScraperReport] = {}
 
-    # do jurisdiction
-    jurisdiction_scraper = JurisdictionScraper(
-        state,
-        datadir,
-        strict_validation=args.strict,
-        fastmode=args.fastmode,
-        realtime=args.realtime,
-    )
-
-    scraper_reports["jurisdiction"] = jurisdiction_scraper.do_scrape()
-
     for scraper_name, scraper_args in scraper_args_by_name.items():
         ScraperClass = state.scrapers[scraper_name]
         # new scraper each time
@@ -118,19 +107,14 @@ def do_scrape(
             fastmode=args.fastmode,
             realtime=args.realtime,
         )
-
-        if (
-            "session" in inspect.getargspec(ScraperClass.scrape).args
-            and "session" not in scraper_args
-        ):
-            scraper_args["session"] = legislative_session.identifier
-
         scraper_reports[scraper_name] = scraper.do_scrape(**scraper_args)
 
     return scraper_reports
 
 
-def do_import(state: State, args: argparse.Namespace) -> dict[str, typing.Any]:
+def do_import(
+    state: State, from_scrapers: list[str], args: argparse.Namespace
+) -> dict[str, typing.Any]:
     datadir = os.path.join(settings.SCRAPED_DATA_DIR, args.module)
 
     jurisdiction_importer = JurisdictionImporter(state.jurisdiction_id)
@@ -138,11 +122,17 @@ def do_import(state: State, args: argparse.Namespace) -> dict[str, typing.Any]:
     vote_event_importer = VoteEventImporter(state.jurisdiction_id, bill_importer)
     event_importer = EventImporter(state.jurisdiction_id, vote_event_importer)
 
-    importers: list[BaseImporter] = [
-        bill_importer,
-        vote_event_importer,
-        event_importer,
-    ]
+    importers_per_scraper: dict[str, list[BaseImporter]] = {
+        "jurisdiction": [jurisdiction_importer],
+        "bills": [bill_importer, vote_event_importer],
+        "events": [event_importer],
+        "votes": [vote_event_importer],
+    }
+    importers: list[BaseImporter] = []
+    for scraper in from_scrapers:
+        for importer in importers_per_scraper[scraper]:
+            if importer not in importers:
+                importers.append(importer)
 
     import_reports: dict[str, ImportReport] = {}
 
@@ -151,9 +141,6 @@ def do_import(state: State, args: argparse.Namespace) -> dict[str, typing.Any]:
         logger.info(f"import {import_type}s...")
         import_report = importer.import_directory(datadir)
         import_reports[import_type] = import_report
-
-    # do jurisdiction first
-    do_importer(jurisdiction_importer)
 
     with transaction.atomic():
         for importer in importers:
@@ -213,6 +200,133 @@ def do_update(
     if not available_scrapers:
         raise CommandError("no scrapers defined on jurisdiction")
 
+    available_scrapers["jurisdiction"] = JurisdictionScraper
+
+    scraper_args_by_name = {}
+    if other_args:
+        scraper_args_by_name = _get_custom_scraper_args(
+            other_args, available_scrapers, args
+        )
+
+    runs = []
+    if scraper_args_by_name:
+        # if the cmd line specified scrapers, only run those
+        runs = [list(scraper_args_by_name.keys())]
+    else:
+        scraper_args_by_name = {scraper_name: {} for scraper_name in available_scrapers}
+        # prefer default_scrapers as they're own run
+        if default_scrapers:
+            # do jurisdiction first
+            runs = [["jurisdiction"], default_scrapers]
+
+            rest = []
+            for scraper_name in available_scrapers:
+                if scraper_name == "jurisdiction":
+                    continue
+                if scraper_name not in default_scrapers:
+                    rest.append(scraper_name)
+            if rest:
+                runs.append(rest)
+        else:
+            runs = [["jurisdiction"], list(available_scrapers.keys())]
+
+    # modify args in-place so we can pass them around
+    if not args.actions:
+        args.actions = ALL_ACTIONS
+
+    run_plan_models: list[RunPlan] = []
+    for run in runs:
+        run_scraper_args_by_name = {name: scraper_args_by_name[name] for name in run}
+
+        if run != ["jurisdiction"]:
+            legislative_sessions = get_legislative_sessions(args, state)
+        else:
+            legislative_sessions = [None]
+
+        for legislative_session in legislative_sessions:
+            report = Report(
+                jurisdiction_id=state.jurisdiction_id,
+                legislative_session=legislative_session,
+                start=utils.utcnow(),
+                plan=Plan(
+                    module=args.module,
+                    actions=args.actions,
+                    scraper_args_by_name=run_scraper_args_by_name,
+                ),
+            )
+            print()
+            print()
+            print("### Prepared report:")
+            print()
+            print_report(report)
+            print()
+
+            # save the pending report
+            run_plan_model = save_report(report)
+            try:
+                if "scrape" in args.actions:
+                    report.scraper_reports = do_scrape(
+                        state,
+                        legislative_session,
+                        args,
+                        report.plan.scraper_args_by_name,
+                    )
+
+                if "import" in args.actions:
+                    scraper_names = list(report.scraper_reports.keys())
+                    report.import_reports = do_import(state, scraper_names, args)
+
+                report.success = True
+            except Exception as exc:
+                report.success = False
+                report.exception = exc
+                report.traceback = traceback.format_exc()
+
+            report.end = utils.utcnow()
+            run_plan_model = save_report(report, run_plan_model)
+            run_plan_models.append(run_plan_model)
+
+            if report.success and "bills" in run:
+                generate_session_data_quality_report(
+                    legislative_session=report.legislative_session,
+                    run_plan=run_plan_model,
+                )
+                publish_os_update_finished(run_plan_model)
+
+            print()
+            print()
+            print("### Final report:")
+            print()
+            print_report(report)
+            print()
+
+    return run_plan_models
+
+
+def _get_custom_scraper_args(
+    other_args: list[str], available_scrapers: dict[str, type], args: argparse.Namespace
+) -> dict[str, dict[str, str]]:
+    result = {}
+    # parse arg list in format: (scraper (k=v )+)+
+    scraper_name = None
+    for arg in other_args:
+        if "=" in arg:
+            if not scraper_name:
+                raise CommandError("argument {} before scraper name".format(arg))
+            k, v = arg.split("=", 1)
+            v = v.strip("'")
+            result[scraper_name][k] = v
+        elif arg in available_scrapers:
+            scraper_name = arg
+            result[scraper_name] = {}
+        else:
+            raise CommandError(
+                "no such scraper: module={} scraper={}".format(args.module, arg)
+            )
+    return result
+
+
+def get_legislative_sessions(args: argparse.Namespace, state: State) -> None:
     legislative_sessions = []
     if args.session:
         legislative_sessions = LegislativeSession.objects.filter(
@@ -233,100 +347,7 @@ def do_update(
         )
         if not legislative_sessions:
             raise CommandError("no active legislative sessions found")
-
-    scraper_args_by_name = {}
-    if other_args:
-        # parse arg list in format: (scraper (k=v)+)+
-        scraper_name = None
-        for arg in other_args:
-            if "=" in arg:
-                if not scraper_name:
-                    raise CommandError("argument {} before scraper name".format(arg))
-                k, v = arg.split("=", 1)
-                v = v.strip("'")
-                scraper_args_by_name[scraper_name][k] = v
-            elif arg in state.scrapers:
-                scraper_name = arg
-                scraper_args_by_name[scraper_name] = {}
-            else:
-                raise CommandError(
-                    "no such scraper: module={} scraper={}".format(args.module, arg)
-                )
-
-    runs = []
-    if scraper_args_by_name:
-        # if the cmd line specified scrapers, only run those
-        runs = [list(scraper_args_by_name.keys())]
-    else:
-        scraper_args_by_name = {scraper_name: {} for scraper_name in available_scrapers}
-        # prefer default_scrapers as they're own run
-        if default_scrapers:
-            runs = [default_scrapers]
-            rest = []
-            for scraper_name in available_scrapers:
-                if scraper_name not in default_scrapers:
-                    rest.append(scraper_name)
-            if rest:
-                runs.append(rest)
-        else:
-            runs = [list(available_scrapers.keys())]
-
-    # modify args in-place so we can pass them around
-    if not args.actions:
-        args.actions = ALL_ACTIONS
-
-    run_plan_models: list[RunPlan] = []
-    for run in runs:
-        run_scraper_args_by_name = {
-            scraper_name: scraper_args_by_name[scraper_name] for scraper_name in run
-        }
-        for legislative_session in legislative_sessions:
-            report = Report(
-                jurisdiction_id=state.jurisdiction_id,
-                legislative_session=legislative_session,
-                start=utils.utcnow(),
-                plan=Plan(
-                    module=args.module,
-                    actions=args.actions,
-                    scraper_args_by_name=run_scraper_args_by_name,
-                ),
-            )
-            print_report(report)
-
-            # save the pending report
-            run_plan_model = save_report(report)
-            try:
-                if "scrape" in args.actions:
-                    report.scraper_reports = do_scrape(
-                        state,
-                        legislative_session,
-                        args,
-                        report.plan.scraper_args_by_name,
-                    )
-
-                if "import" in args.actions:
-                    report.import_reports = do_import(state, args)
-
-                report.success = True
-            except Exception as exc:
-                report.success = False
-                report.exception = exc
-                report.traceback = traceback.format_exc()
-
-            report.end = utils.utcnow()
-            run_plan_model = save_report(report, run_plan_model)
-            run_plan_models.append(run_plan_model)
-
-            if report.success and "bills" in run:
-                generate_session_data_quality_report(
-                    legislative_session=report.legislative_session,
-                    run_plan=run_plan_model,
-                )
-                publish_os_update_finished(run_plan_model)
-
-            print_report(report)
-
-    return run_plan_models
+    return legislative_sessions
 
 
 def parse_args() -> tuple[argparse.Namespace, list[str]]:
