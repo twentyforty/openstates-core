@@ -291,7 +291,7 @@ def do_update(
                     legislative_session=report.legislative_session,
                     run_plan=run_plan_model,
                 )
-                publish_os_update_finished(run_plan_model)
+            publish_os_update_finished(run_plan_model)
 
             print()
             print()
