@@ -9,7 +9,6 @@ import contextlib
 import datetime
 import glob
 import importlib
-import inspect
 import logging
 import os
 import signal
@@ -32,7 +31,7 @@ from openstates.cli.reports import (
     save_report,
 )
 from openstates.data.models import Jurisdiction, LegislativeSession, RunPlan
-from openstates.exceptions import CommandError
+from openstates.exceptions import CommandError, ScrapeError
 from openstates.importers import (
     BillImporter,
     EventImporter,
@@ -85,6 +84,7 @@ def do_scrape(
     legislative_session: LegislativeSession,
     args: argparse.Namespace,
     scraper_args_by_name: dict[str, dict[str, str]],
+    bill_scrape_reports: dict[str, ScraperReport] = {},
 ) -> dict[str, ScraperReport]:
     # make output and cache dirs
     utils.makedirs(settings.CACHE_DIR)
@@ -107,6 +107,14 @@ def do_scrape(
             fastmode=args.fastmode,
             realtime=args.realtime,
         )
+        # votes scrapers depend on a successful bills scrape
+        if scraper_name == "votes":
+            bill_scrape_report = bill_scrape_reports.get(legislative_session.id)
+            if bill_scrape_report is None or bill_scrape_report.end is None:
+                raise ScrapeError(
+                    f"Votes scraper requires successful bills scrape run for {legislative_session.identifier}"
+                )
+
         scraper_reports[scraper_name] = scraper.do_scrape(**scraper_args)
 
     return scraper_reports
@@ -194,51 +202,38 @@ def do_update(
     state: State,
 ) -> list[RunPlan]:
     available_scrapers = getattr(state, "scrapers", {})
-    default_scrapers = getattr(state, "default_scrapers", None)
     scraper_args_by_name: dict[str, dict[str, str]] = {}
 
     if not available_scrapers:
         raise CommandError("no scrapers defined on jurisdiction")
 
     available_scrapers["jurisdiction"] = JurisdictionScraper
-
+    scrapers_to_run: list[str] = []
     scraper_args_by_name = {}
     if other_args:
+        # if the cmd line specified scrapers, only run those
         scraper_args_by_name = _get_custom_scraper_args(
             other_args, available_scrapers, args
         )
-
-    runs = []
-    if scraper_args_by_name:
-        # if the cmd line specified scrapers, only run those
-        runs = [list(scraper_args_by_name.keys())]
+        scrapers_to_run = list(scraper_args_by_name.keys())
     else:
-        scraper_args_by_name = {scraper_name: {} for scraper_name in available_scrapers}
-        # prefer default_scrapers as they're own run
-        if default_scrapers:
-            # do jurisdiction first
-            runs = [["jurisdiction"], default_scrapers]
+        scrapers_to_run = list(available_scrapers.keys())
 
-            rest = []
-            for scraper_name in available_scrapers:
-                if scraper_name == "jurisdiction":
-                    continue
-                if scraper_name not in default_scrapers:
-                    rest.append(scraper_name)
-            if rest:
-                runs.append(rest)
-        else:
-            runs = [["jurisdiction"], list(available_scrapers.keys())]
+    order = ["jurisdiction", "bills", "votes", "events"]
+    scrapers_to_run.sort(key=lambda s: order.index(s) if s in order else 999)
 
     # modify args in-place so we can pass them around
     if not args.actions:
         args.actions = ALL_ACTIONS
 
     run_plan_models: list[RunPlan] = []
-    for run in runs:
-        run_scraper_args_by_name = {name: scraper_args_by_name[name] for name in run}
+    bill_scrape_reports: dict[str, ScraperReport] = {}
 
-        if run != ["jurisdiction"]:
+    for scraper_name in scrapers_to_run:
+        scraper_args = scraper_args_by_name.get(scraper_name, {})
+
+        legislative_sessions: list[LegislativeSession]
+        if scraper_name != "jurisdiction":
             legislative_sessions = get_legislative_sessions(args, state)
         else:
             legislative_sessions = [None]
@@ -251,15 +246,11 @@ def do_update(
                 plan=Plan(
                     module=args.module,
                     actions=args.actions,
-                    scraper_args_by_name=run_scraper_args_by_name,
+                    scraper_args_by_name={scraper_name: scraper_args},
                 ),
             )
-            print()
-            print()
-            print("### Prepared report:")
-            print()
-            print_report(report)
-            print()
+
+            _print_report(report, "Initial report")
 
             # save the pending report
             run_plan_model = save_report(report)
@@ -271,6 +262,10 @@ def do_update(
                         args,
                         report.plan.scraper_args_by_name,
                     )
+                    if "bills" in report.scraper_reports:
+                        bill_scrape_reports[
+                            legislative_session.id
+                        ] = report.scraper_reports["bills"]
 
                 if "import" in args.actions:
                     scraper_names = list(report.scraper_reports.keys())
@@ -286,21 +281,24 @@ def do_update(
             run_plan_model = save_report(report, run_plan_model)
             run_plan_models.append(run_plan_model)
 
-            if report.success and "bills" in run:
+            if report.success and scraper_name in ("bills", "votes"):
                 generate_session_data_quality_report(
                     legislative_session=report.legislative_session,
                     run_plan=run_plan_model,
                 )
             publish_os_update_finished(run_plan_model)
-
-            print()
-            print()
-            print("### Final report:")
-            print()
-            print_report(report)
-            print()
+            _print_report(report, "Final report")
 
     return run_plan_models
+
+
+def _print_report(report: Report, caption: str) -> None:
+    print()
+    print()
+    print(f"### {caption}")
+    print()
+    print_report(report)
+    print()
 
 
 def _get_custom_scraper_args(

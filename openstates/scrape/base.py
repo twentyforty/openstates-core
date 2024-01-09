@@ -214,7 +214,7 @@ class Scraper(scrapelib.Scraper):
                 )
 
         report.end = utils.utcnow()
-        report.skipped = getattr(self, "skipped", 0)
+        report.skipped_objects = getattr(self, "skipped", 0)
         for _type, nameset in self.output_names.items():
             report.objects[_type] += len(nameset)
 

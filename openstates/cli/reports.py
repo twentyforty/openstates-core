@@ -26,7 +26,7 @@ class ImportReport:
 class ScraperReport:
     start: datetime.datetime = None
     objects: dict[str, int] = {}
-    skipped: Optional[int] = None
+    skipped_objects: Optional[int] = None
     end: Optional[datetime.datetime] = None
 
 
