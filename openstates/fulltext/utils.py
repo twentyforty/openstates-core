@@ -11,7 +11,7 @@ def pdfdata_to_text(data: bytes, params=[]) -> str:
         tmpf.flush()
         try:
             pipe = subprocess.Popen(
-                ["pdftotext", "-layout", tmpf.name, "-", *params],
+                ["pdftotext", "-layout", *params, tmpf.name, "-"],
                 stdout=subprocess.PIPE,
                 close_fds=True,
             ).stdout
