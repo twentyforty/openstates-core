@@ -64,6 +64,13 @@ class LegislativeSession(RelatedBase):
     end_date = models.CharField(max_length=10)  # YYYY[-MM[-DD]]
     active = models.BooleanField(default=False)
 
+    last_attempted_bills_scrape_at = models.DateTimeField(null=True)
+    last_successful_bills_scrape_at = models.DateTimeField(null=True)
+    last_attempted_votes_scrape_at = models.DateTimeField(null=True)
+    last_successful_votes_scrape_at = models.DateTimeField(null=True)
+    last_attempted_events_scrape_at = models.DateTimeField(null=True)
+    last_successful_events_scrape_at = models.DateTimeField(null=True)
+
     def __str__(self):
         return "{} {}".format(self.jurisdiction, self.name)
 

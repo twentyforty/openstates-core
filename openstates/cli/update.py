@@ -281,15 +281,52 @@ def do_update(
             run_plan_model = save_report(report, run_plan_model)
             run_plan_models.append(run_plan_model)
 
-            if report.success and scraper_name in ("bills", "votes"):
-                generate_session_data_quality_report(
-                    legislative_session=report.legislative_session,
-                    run_plan=run_plan_model,
-                )
+            if legislative_session:
+                has_votes_scraper = state.scrapers.get("votes") is not None
+                _set_attempted_scrape_at(legislative_session, scraper_name, report.start)
+                if scraper_name == "bills" and not has_votes_scraper:
+                    _set_attempted_scrape_at(legislative_session, "votes", report.start)
+
+                if report.success:
+                    _set_successful_scrape_at(legislative_session, scraper_name, report.end)
+                    if scraper_name == "bills" and not has_votes_scraper:
+                        _set_successful_scrape_at(legislative_session, "votes", report.end)
+
+                legislative_session.save()
+
+            if report.success:
+                if scraper_name in ("bills", "votes"):
+                    generate_session_data_quality_report(
+                        legislative_session=report.legislative_session,
+                        run_plan=run_plan_model,
+                    )
+
             publish_os_update_finished(run_plan_model)
             _print_report(report, "Final report")
 
     return run_plan_models
+
+
+def _set_attempted_scrape_at(
+    legislative_session: LegislativeSession,
+    scraper_name: str,
+    start: datetime.datetime,
+) -> None:
+    attr = f"last_attempted_{scraper_name}_scrape_at"
+    if hasattr(legislative_session, attr):
+        setattr(legislative_session, attr, start)
+        legislative_session.save()
+
+
+def _set_successful_scrape_at(
+    legislative_session: LegislativeSession,
+    scraper_name: str,
+    end: datetime.datetime,
+) -> None:
+    attr = f"last_successful_{scraper_name}_scrape_at"
+    if hasattr(legislative_session, attr):
+        setattr(legislative_session, attr, end)
+        legislative_session.save()
 
 
 def _print_report(report: Report, caption: str) -> None:
