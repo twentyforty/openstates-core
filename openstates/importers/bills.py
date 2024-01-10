@@ -92,15 +92,21 @@ class BillImporter(BaseImporter):
                     )
                 elif "person_id" in entity:
                     entity["person_id"] = self.resolve_person(
-                        entity["person_id"], session.start_date, session.end_date
+                        pseudo_person_id=entity["person_id"],
+                        legislative_session=session,
                     )
 
         for sponsor in data["sponsorships"]:
+            if sponsor.get("chamber_id"):
+                sponsor["chamber_id"] = self.org_importer.resolve_json_id(
+                    sponsor["chamber_id"], allow_no_match=True
+                )
+
             if sponsor.get("person_id"):
                 filter = {
                     "pseudo_person_id": sponsor["person_id"],
-                    "start_date": session.start_date,
-                    "end_date": session.end_date,
+                    "legislatve_session": session,
+                    "chamber_id": sponsor.get("chamber_id"),
                 }
                 sponsor["person_id"] = self.resolve_person(**filter)
                 sponsor["scraped_name_match_id"] = self.resolve_scraped_name_match_id(
@@ -110,11 +116,6 @@ class BillImporter(BaseImporter):
             if sponsor.get("organization_id"):
                 sponsor["organization_id"] = self.org_importer.resolve_json_id(
                     sponsor["organization_id"], allow_no_match=True
-                )
-            
-            if sponsor.get("chamber_id"):
-                sponsor["chamber_id"] = self.org_importer.resolve_json_id(
-                    sponsor["chamber_id"], allow_no_match=True
                 )
 
         return data

@@ -8,7 +8,7 @@ from django.db.models import Q, Model, QuerySet
 from django.db.models.signals import post_save
 
 from openstates.cli.reports import ImportReport
-from openstates.data.models.people_orgs import OtherName
+from openstates.data.models.people_orgs import OtherName, ScrapedName
 from .. import settings
 from ..data.models import LegislativeSession, Person, Bill
 from ..exceptions import DuplicateItemError, UnresolvedIdError, DataImportError
@@ -170,15 +170,12 @@ class BaseImporter:
         pass
 
     def resolve_bill(self, bill_id: str, *, date: str) -> typing.Optional[_ID]:
-        bill_transform_func = settings.IMPORT_TRANSFORMERS.get("bill", {}).get(
-            "identifier", None
-        )
+        bill_transform_func = settings.IMPORT_TRANSFORMERS.get("bill", {}).get("identifier", None)
         if bill_transform_func:
             bill_id = bill_transform_func(bill_id)
 
         objects = Bill.objects.filter(
-            Q(legislative_session__end_date__gte=date)
-            | Q(legislative_session__end_date=""),
+            Q(legislative_session__end_date__gte=date) | Q(legislative_session__end_date=""),
             legislative_session__start_date__lte=date,
             legislative_session__jurisdiction_id=self.jurisdiction_id,
             identifier=bill_id,
@@ -190,14 +187,10 @@ class BaseImporter:
         elif len(ids) == 0:
             self.error(f"could not resolve bill id {bill_id} {date}, no matches")
         else:
-            self.error(
-                f"could not resolve bill id {bill_id} {date}, {len(ids)} matches"
-            )
+            self.error(f"could not resolve bill id {bill_id} {date}, {len(ids)} matches")
         return None
 
-    def resolve_json_id(
-        self, json_id: str, allow_no_match: bool = False
-    ) -> typing.Optional[_ID]:
+    def resolve_json_id(self, json_id: str, allow_no_match: bool = False) -> typing.Optional[_ID]:
         """
         Given an id found in scraped JSON, return a DB id for the object.
 
@@ -221,9 +214,9 @@ class BaseImporter:
                 spec = self.limit_spec(spec)
 
                 if isinstance(spec, Q):
-                    objects = self.model_class.objects.filter(spec)
+                    objects = self.model_class.objects.filter(spec).distinct()
                 else:
-                    objects = self.model_class.objects.filter(**spec)
+                    objects = self.model_class.objects.filter(**spec).distinct()
                 ids = {each.id for each in objects}
                 if len(ids) == 1:
                     self.pseudo_id_cache[json_id] = ids.pop()
@@ -307,7 +300,7 @@ class BaseImporter:
         )
 
         futures = []
-        with ThreadPoolExecutor(max_workers=50) as executor:
+        with ThreadPoolExecutor(max_workers=1) as executor:
             imports = self._prepare_imports(data_items)
             for index, (json_id, data) in enumerate(imports):
                 futures.append(executor.submit(self.import_item, data, json_id, index))
@@ -427,9 +420,7 @@ class BaseImporter:
                 new_items = []
                 # build a list of keyfields to existing database objects
                 keylist = self.merge_related[field]
-                keyed_dbitems = {
-                    tuple(getattr(item, k) for k in keylist): item for item in dbitems
-                }
+                keyed_dbitems = {tuple(getattr(item, k) for k in keylist): item for item in dbitems}
 
                 # go through 'new' items
                 #   if item with the same keyfields exists:
@@ -450,9 +441,7 @@ class BaseImporter:
                             if subsubfield_dict and subsubfield_dict[2].get(fname):
                                 # if field has related items
                                 updated_fields.extend(
-                                    self._update_related(
-                                        dbitem, {fname: val}, subsubfield_dict[2]
-                                    )
+                                    self._update_related(dbitem, {fname: val}, subsubfield_dict[2])
                                 )
                             else:
                                 if getattr(dbitem, fname) != val:
@@ -473,13 +462,9 @@ class BaseImporter:
                 # default to doing nothing
                 do_delete = do_update = False
 
-                if (
-                    items and dbitems_count
-                ):  # we have items, so does db, check for conflict
+                if items and dbitems_count:  # we have items, so does db, check for conflict
                     do_delete = do_update = do_items_differ
-                elif (
-                    items and not dbitems_count
-                ):  # we have items, db doesn't, just update
+                elif items and not dbitems_count:  # we have items, db doesn't, just update
                     do_update = True
                 elif not items and dbitems_count:  # db has items, we don't, just delete
                     do_delete = True
@@ -526,17 +511,13 @@ class BaseImporter:
                     subobjects.append(Subtype(**item))
                     all_subrelated.append(subrelated)
                 except Exception as e:
-                    raise DataImportError(
-                        "{} while importing {} as {}".format(e, item, Subtype)
-                    )
+                    raise DataImportError("{} while importing {} as {}".format(e, item, Subtype))
 
             # add all subobjects at once (really great for actions & votes)
             try:
                 Subtype.objects.bulk_create(subobjects)
             except Exception as e:
-                raise DataImportError(
-                    "{} while importing {} as {}".format(e, subobjects, Subtype)
-                )
+                raise DataImportError("{} while importing {} as {}".format(e, subobjects, Subtype))
 
             # after import the subobjects, import their subsubobjects
             for subobj, subrel in zip(subobjects, all_subrelated):
@@ -564,7 +545,6 @@ class BaseImporter:
     def get_seen_sessions(self) -> list[str]:
         return [s.id for s in self.session_cache.values()]
 
-
     def resolve_scraped_name_match_id(
         self,
         pseudo_person_id: str,
@@ -577,11 +557,11 @@ class BaseImporter:
     def resolve_person(
         self,
         pseudo_person_id: str,
-        start_date: typing.Optional[str] = None,
-        end_date: typing.Optional[str] = None,
-        org_classification: typing.Optional[str] = None,
+        legislative_session: typing.Optional[LegislativeSession] = None,
+        chamber_id: typing.Optional[str] = None,
     ) -> str:
-        cache_key = (pseudo_person_id, start_date, end_date)
+        legislative_session_id = legislative_session.id if legislative_session else None
+        cache_key = (pseudo_person_id, legislative_session_id, chamber_id)
         if cache_key in self.person_cache:
             return self.person_cache[cache_key]
 
@@ -591,66 +571,61 @@ class BaseImporter:
         if list(spec.keys()) == ["name"]:
             # if we're just resolving on name, include other names and family name
             scraped_name_value = spec["name"]
-            spec = Q(name__iexact=scraped_name_value) | Q(
-                family_name__iexact=scraped_name_value
-            )
+            spec = Q(name__iexact=scraped_name_value) | Q(family_name__iexact=scraped_name_value)
         else:
             spec = Q(**spec)
 
         spec &= Q(
             memberships__organization__jurisdiction_id=self.jurisdiction_id,
+            memberships__organization__classification__in=(
+                "upper",
+                "lower",
+                "legislature",
+            )
         )
 
-        if org_classification:
-            spec &= Q(memberships__organization__classification=org_classification)
-        else:
-            spec &= Q(
-                memberships__organization__classification__in=(
-                    "upper",
-                    "lower",
-                    "legislature",
-                )
-            )
-
-        # we don't know what dates we have available to us... it can be any configuration
-        # of start/end dates or they can all be null.  Instead of requiring a strict overlap
-        # we use them to exclude people that are definitely not serving in the session:
-        # if we know when the session started, ensure they are either in office still or
-        #   that their end date was after the start of the session
-        if start_date:
+        if legislative_session:
             spec &= Q(memberships__end_date="") | Q(
-                memberships__end_date__gt=start_date
+                memberships__end_date__gt=legislative_session.start_date
             )
-        # if we know when the session ended, ensure that they didn't start after it ended
-        if end_date:
             spec &= Q(memberships__start_date="") | Q(
-                memberships__start_date__lt=end_date
+                memberships__start_date__lt=legislative_session.end_date
             )
 
         errmsg = None
-        matched_persons = Person.objects.filter(spec)
+        matched_persons = Person.objects.filter(spec).distinct()
 
         if matched_persons.count() == 1:
             self.person_cache[cache_key] = matched_persons.first().id
-        elif not matched_persons.exists():
-            spec |= Q(other_names__name__iexact=scraped_name_value)
-            matched_persons = Person.objects.filter(spec)
+        elif not matched_persons.exists() and legislative_session:
+            scraped_name = ScrapedName.objects.filter(
+                value=scraped_name_value,
+                legislative_session=legislative_session,
+                chamber_id=chamber_id,
+            )
+            other_name_filter = Q(other_names__name=scraped_name_value)
+            
+            spec |= other_name_filter
+            matched_persons = Person.objects.filter(spec).distinct()
             if matched_persons.count() == 1:
                 matched_person = matched_persons.first()
-                other_names = OtherName.objects.filter(person_id=matched_person.id)
-                for other_name in other_names:
-                    if other_name.name.lower() == scraped_name_value.lower():
-                        self.scraped_name_match_ids[
-                            cache_key
-                        ] = other_name.scraped_name_match_id
-                        break
                 self.person_cache[cache_key] = matched_person.id
+
+                # if we're matching on other name, make sure to save the match id
+                scraped_name_match_id = _get_scraped_match_id(matched_person, scraped_name_value)
+                if scraped_name_match_id:
+                    self.scraped_name_match_ids[cache_key] = scraped_name_match_id
+
             elif matched_persons.count() == 0:
                 errmsg = "no people returned for spec"
             else:
-                errmsg = "multiple people returned for spec"
+                errmsg = '"{}" multiple people returned for spec {}"'.format(
+                    scraped_name_value, str(matched_persons)
+                )
         else:
-            errmsg = "multiple people returned for spec"
+            errmsg = '"{}" multiple people returned for spec {}"'.format(
+                scraped_name_value, str(matched_persons)
+            )
 
         # either raise or log error
         if errmsg:
@@ -659,3 +634,12 @@ class BaseImporter:
 
         # return the newly-cached object
         return self.person_cache[cache_key]
+
+
+def _get_scraped_match_id(person: Person, scraped_name_value: str):
+    other_names = OtherName.objects.filter(
+        person_id=person.id, scraped_name_match_id__isnull=False
+    ).order_by("-scraped_name_match_id")
+    for other_name in other_names:
+        if other_name.name.lower() == scraped_name_value.lower():
+            return other_name.scraped_name_match_id

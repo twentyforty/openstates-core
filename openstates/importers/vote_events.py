@@ -120,8 +120,8 @@ class VoteEventImporter(BaseImporter):
         for vote in data["votes"]:
             filter = {
                 "pseudo_person_id": vote["voter_id"],
-                "start_date": session.start_date,
-                "end_date": session.end_date,
+                "legislative_session": session,
+                "chamber_id": data["organization_id"],
             }
             vote["voter_id"] = self.resolve_person(**filter)
             vote["scraped_name_match_id"] = self.resolve_scraped_name_match_id(**filter)

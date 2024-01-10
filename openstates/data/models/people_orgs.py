@@ -1,10 +1,11 @@
 import datetime
+import re
 from django.db import models
-from django.db.models import Q, QuerySet, constraints
+from django.db.models import Q, QuerySet, UniqueConstraint, constraints
 
 from .base import OCDBase, LinkBase, OCDIDField, RelatedBase, IdentifierBase
 from .division import Division
-from .jurisdiction import Jurisdiction
+from .jurisdiction import Jurisdiction, LegislativeSession
 from .. import common
 
 
@@ -246,6 +247,50 @@ class PersonIdentifier(IdentifierBase):
         db_table = "opencivicdata_personidentifier"
 
 
+class ScrapedName(models.Model):
+    value = models.CharField(max_length=300, db_index=True)
+    legislative_session = models.ForeignKey(
+        LegislativeSession,
+        related_name="scraped_names",
+        null=True,
+        on_delete=models.CASCADE,
+        help_text="A link to the LegislativeSession connected to this alternative name.",
+    )
+    chamber = models.ForeignKey(
+        Organization,
+        related_name="scraped_names",
+        null=True,
+        on_delete=models.CASCADE,
+        help_text="A link to the Chamber connected to this alternative name.",
+    )
+    person = models.ForeignKey(
+        Person,
+        related_name="scraped_names",
+        null=True,
+        on_delete=models.CASCADE,
+    )
+    organization = models.ForeignKey(
+        Organization,
+        related_name="scraped_names",
+        null=True,
+        on_delete=models.CASCADE,
+    )
+    scraped_name_match_id = models.PositiveIntegerField(null=True)
+
+    class Meta:
+        constraints = [
+            UniqueConstraint(
+                fields=["legislative_session", "chamber", "value"],
+                condition=Q(chamber__isnull=False),
+                name="unique_with_chamber",
+            ),
+            UniqueConstraint(
+                fields=["legislative_session", "value"],
+                condition=Q(chamber=None),
+                name="unique_without_chamber",
+            ),
+        ]
+
 class OtherName(RelatedBase):
     """
     Alternate or former name of a Person.
@@ -285,17 +330,16 @@ class OtherName(RelatedBase):
         on_delete=models.CASCADE,
         help_text="A link to the Organization connected to this alternative name.",
     )
-    scraped_name_match_id = models.PositiveIntegerField(null=True)
 
     class Meta:
         db_table = "opencivicdata_personname"
         constraints = [
             constraints.UniqueConstraint(
-                fields=["name", "start_date", "end_date", "person_id"],
+                fields=["name", "legiskative_session", "person_id"],
                 name="unique_personname",
             ),
             constraints.UniqueConstraint(
-                fields=["name", "start_date", "end_date", "organization_id"],
+                fields=["name", "legislative_session", "organization_id"],
                 name="unique_orgname",
             ),
             constraints.CheckConstraint(
