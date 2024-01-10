@@ -34,6 +34,13 @@ class RunPlan(models.Model):
     class Meta:
         db_table = "pupa_runplan"
 
+    def __str__(self) -> str:
+        jurisdiction_id = self.jurisdiction_id
+        if jurisdiction_id is None:
+            jurisdiction_id = ""
+        else:
+            jurisdiction_id = " - " + jurisdiction_id.split("/")[-2]
+        return f"{self.pk}{jurisdiction_id} - {self.start_time.strftime('%Y-%m-%d %H:%M:%S')} - {self.success}"
 
 class ScrapeReport(models.Model):
     plan = models.ForeignKey(RunPlan, related_name="scrapers", on_delete=models.CASCADE)
