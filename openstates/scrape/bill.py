@@ -132,7 +132,10 @@ class Bill(SourceMixin, AssociatedLinkMixin, BaseModel):
                 entity_id = _make_pseudo_id(name=name)
             sp[entity_type + "_id"] = entity_id
         if chamber:
-            sp["chamber_id"] = _make_pseudo_id(classification=chamber)
+            if chamber[0] == "~":
+                sp["chamber_id"] = chamber
+            else:
+                sp["chamber_id"] = _make_pseudo_id(classification=chamber)
             
         if sp in self.sponsorships:
             warnings.warn(f"duplicate sponsor {sp}", RuntimeWarning)

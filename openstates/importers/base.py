@@ -1,20 +1,22 @@
-import os
 import copy
 import glob
 import json
 import logging
+import os
 import typing
-from django.db.models import Q, Model, QuerySet
+from concurrent.futures import ThreadPoolExecutor, as_completed
+
+from django.db.models import Model, Q
 from django.db.models.signals import post_save
 
 from openstates.cli.reports import ImportReport
-from openstates.data.models.people_orgs import OtherName, ScrapedName
+from openstates.data.models.scraped_name import ScrapedNameMatch
+
 from .. import settings
-from ..data.models import LegislativeSession, Person, Bill
-from ..exceptions import DuplicateItemError, UnresolvedIdError, DataImportError
+from ..data.models import Bill, LegislativeSession, Person
+from ..exceptions import DataImportError, DuplicateItemError, UnresolvedIdError
 from ..utils import get_pseudo_id, utcnow
 from ._types import _ID, _JsonDict, _RelatedModels, _TransformerMapping
-from concurrent.futures import ThreadPoolExecutor, as_completed
 
 _PersonCacheKey = tuple[str, typing.Optional[str], typing.Optional[str]]
 
@@ -133,7 +135,7 @@ class BaseImporter:
         self.duplicates: dict[str, str] = {}
         self.pseudo_id_cache: dict[str, typing.Optional[_ID]] = {}
         self.person_cache: dict[_PersonCacheKey, typing.Optional[str]] = {}
-        self.scraped_name_match_ids: dict[str, int] = {}
+        self.scraped_name_match: dict[_PersonCacheKey, ScrapedNameMatch] = {}
         self.session_cache: dict[str, LegislativeSession] = {}
         self.logger = logging.getLogger("openstates")
         self.info = self.logger.info
@@ -300,7 +302,7 @@ class BaseImporter:
         )
 
         futures = []
-        with ThreadPoolExecutor(max_workers=1) as executor:
+        with ThreadPoolExecutor(max_workers=20) as executor:
             imports = self._prepare_imports(data_items)
             for index, (json_id, data) in enumerate(imports):
                 futures.append(executor.submit(self.import_item, data, json_id, index))
@@ -548,29 +550,30 @@ class BaseImporter:
     def resolve_scraped_name_match_id(
         self,
         pseudo_person_id: str,
-        start_date: typing.Optional[str] = None,
-        end_date: typing.Optional[str] = None,
-    ) -> typing.Optional[int]:
-        cache_key = (pseudo_person_id, start_date, end_date)
-        return self.scraped_name_match_ids.get(cache_key)
+        legislative_session: LegislativeSession,
+        chamber_id: typing.Optional[str] = None,
+    ) -> typing.Optional[str]:
+        cache_key = (pseudo_person_id, str(legislative_session.id), chamber_id)
+        result = self.scraped_name_match.get(cache_key)
+        return result.pk if result else None
 
     def resolve_person(
         self,
         pseudo_person_id: str,
         legislative_session: typing.Optional[LegislativeSession] = None,
         chamber_id: typing.Optional[str] = None,
-    ) -> str:
-        legislative_session_id = legislative_session.id if legislative_session else None
+    ) -> typing.Optional[str]:
+        legislative_session_id = str(legislative_session.id) if legislative_session else None
         cache_key = (pseudo_person_id, legislative_session_id, chamber_id)
         if cache_key in self.person_cache:
             return self.person_cache[cache_key]
 
         # turn spec into DB query
         spec = get_pseudo_id(pseudo_person_id)
-        scraped_name_value: str = None
+        scraped_name_value: str = spec.get("name")
+
         if list(spec.keys()) == ["name"]:
             # if we're just resolving on name, include other names and family name
-            scraped_name_value = spec["name"]
             spec = Q(name__iexact=scraped_name_value) | Q(family_name__iexact=scraped_name_value)
         else:
             spec = Q(**spec)
@@ -581,7 +584,7 @@ class BaseImporter:
                 "upper",
                 "lower",
                 "legislature",
-            )
+            ),
         )
 
         if legislative_session:
@@ -597,35 +600,33 @@ class BaseImporter:
 
         if matched_persons.count() == 1:
             self.person_cache[cache_key] = matched_persons.first().id
-        elif not matched_persons.exists() and legislative_session:
-            scraped_name = ScrapedName.objects.filter(
+        elif legislative_session:
+            spec = dict(
                 value=scraped_name_value,
                 legislative_session=legislative_session,
-                chamber_id=chamber_id,
+                matched_chamber_id=chamber_id,
+                matched_person__isnull=False,
+                approved=True,
             )
-            other_name_filter = Q(other_names__name=scraped_name_value)
-            
-            spec |= other_name_filter
-            matched_persons = Person.objects.filter(spec).distinct()
-            if matched_persons.count() == 1:
-                matched_person = matched_persons.first()
+            scraped_name_matches = ScrapedNameMatch.objects.filter(**spec)
+            if scraped_name_matches.count() == 1:
+                scraped_name_match = scraped_name_matches.first()
+                matched_person = scraped_name_match.matched_person
                 self.person_cache[cache_key] = matched_person.id
-
-                # if we're matching on other name, make sure to save the match id
-                scraped_name_match_id = _get_scraped_match_id(matched_person, scraped_name_value)
-                if scraped_name_match_id:
-                    self.scraped_name_match_ids[cache_key] = scraped_name_match_id
-
-            elif matched_persons.count() == 0:
-                errmsg = "no people returned for spec"
+                self.scraped_name_match[cache_key] = scraped_name_match
+            elif scraped_name_matches.count() == 0:
+                errmsg = "no scraped name matches for spec {}".format(spec)
             else:
-                errmsg = '"{}" multiple people returned for spec {}"'.format(
-                    scraped_name_value, str(matched_persons)
+                errmsg = "pseudo_person_id: '{}' with spec: '{}' yields multiple scraped name matches: '{}'".format(
+                    pseudo_person_id, spec, str([snm.matched_person for snm in scraped_name_matches])
                 )
         else:
-            errmsg = '"{}" multiple people returned for spec {}"'.format(
-                scraped_name_value, str(matched_persons)
-            )
+            if matched_persons.count() == 0:
+                errmsg = "no people found for spec {}".format(spec)
+            else:
+                errmsg = "pseudo_person_id: '{}'' with spec: '{}' yields multiple people: '{}'".format(
+                    pseudo_person_id, spec, str(matched_persons)
+                )
 
         # either raise or log error
         if errmsg:
@@ -634,12 +635,3 @@ class BaseImporter:
 
         # return the newly-cached object
         return self.person_cache[cache_key]
-
-
-def _get_scraped_match_id(person: Person, scraped_name_value: str):
-    other_names = OtherName.objects.filter(
-        person_id=person.id, scraped_name_match_id__isnull=False
-    ).order_by("-scraped_name_match_id")
-    for other_name in other_names:
-        if other_name.name.lower() == scraped_name_value.lower():
-            return other_name.scraped_name_match_id

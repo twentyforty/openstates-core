@@ -94,7 +94,13 @@ class PersonVote(RelatedBase):
         on_delete=models.SET_NULL,
     )
     note = models.TextField(blank=True)
-    scraped_name_match_id = models.PositiveIntegerField(null=True, db_index=True)
+    scraped_name_match = models.ForeignKey(
+        "ScrapedNameMatch",
+        related_name="votes",
+        null=True,
+        # unresolve match if it goes away
+        on_delete=models.SET_NULL,
+    )
 
     def __str__(self):
         return "{0} voted for {1}".format(self.voter_name, self.option)

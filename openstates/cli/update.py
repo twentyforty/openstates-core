@@ -86,17 +86,18 @@ def do_scrape(
     scraper_args_by_name: dict[str, dict[str, str]],
     bill_scrape_reports: dict[str, ScraperReport] = {},
 ) -> dict[str, ScraperReport]:
-    # make output and cache dirs
-    utils.makedirs(settings.CACHE_DIR)
-    datadir = os.path.join(settings.SCRAPED_DATA_DIR, args.module)
-    utils.makedirs(datadir)
-    # clear json from data dir
-    for f in glob.glob(datadir + "/*.json"):
-        os.remove(f)
 
     scraper_reports: dict[str, ScraperReport] = {}
 
     for scraper_name, scraper_args in scraper_args_by_name.items():
+        # make output and cache dirs
+        utils.makedirs(settings.CACHE_DIR)
+        datadir = os.path.join(settings.SCRAPED_DATA_DIR, args.module, scraper_name)
+        utils.makedirs(datadir)
+        # clear json from data dir
+        for f in glob.glob(datadir + "/*.json"):
+            os.remove(f)
+
         ScraperClass = state.scrapers[scraper_name]
         # new scraper each time
         scraper: Scraper = ScraperClass(
@@ -123,8 +124,6 @@ def do_scrape(
 def do_import(
     state: State, from_scrapers: list[str], args: argparse.Namespace
 ) -> dict[str, typing.Any]:
-    datadir = os.path.join(settings.SCRAPED_DATA_DIR, args.module)
-
     jurisdiction_importer = JurisdictionImporter(state.jurisdiction_id)
     bill_importer = BillImporter(state.jurisdiction_id)
     vote_event_importer = VoteEventImporter(state.jurisdiction_id, bill_importer)
@@ -136,23 +135,24 @@ def do_import(
         "events": [event_importer],
         "votes": [vote_event_importer],
     }
-    importers: list[BaseImporter] = []
+    
+    importers: dict[BaseImporter, str] = {}
     for scraper in from_scrapers:
         for importer in importers_per_scraper[scraper]:
-            if importer not in importers:
-                importers.append(importer)
+            importers[importer] = scraper
 
     import_reports: dict[str, ImportReport] = {}
 
-    def do_importer(importer: BaseImporter) -> None:
+    def do_importer(importer: BaseImporter, scraper_name: str) -> None:
+        datadir = os.path.join(settings.SCRAPED_DATA_DIR, args.module, scraper_name)
         import_type = importer._type
         logger.info(f"import {import_type}s...")
         import_report = importer.import_directory(datadir)
         import_reports[import_type] = import_report
 
     with transaction.atomic():
-        for importer in importers:
-            do_importer(importer)
+        for importer, scraper_name in importers.items():
+            do_importer(importer, scraper_name)
 
         Jurisdiction.objects.filter(id=state.jurisdiction_id).update(
             latest_bill_update=datetime.datetime.utcnow()

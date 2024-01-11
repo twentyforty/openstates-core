@@ -4,6 +4,8 @@ from django.contrib.postgres.fields import ArrayField
 from django.contrib.postgres.search import SearchVectorField
 from django.contrib.postgres.indexes import GinIndex
 
+from openstates.data.models.scraped_name import ScrapedNameMatch
+
 
 from .base import (
     OCDBase,
@@ -163,14 +165,19 @@ class BillSponsorship(RelatedEntityBase):
     )
     primary = models.BooleanField(default=False)
     classification = models.CharField(max_length=100)  # enum?
-    scraped_name_match_id = models.PositiveIntegerField(null=True)
     chamber = models.ForeignKey(
         "data.Organization",
         null=True,
         on_delete=models.SET_NULL,
         related_name="chamber_sponsorships",
     )
-
+    scraped_name_match = models.ForeignKey(
+        ScrapedNameMatch,
+        related_name="sponsorships",
+        null=True,
+        # unresolve match if it goes away
+        on_delete=models.SET_NULL,
+    )
     def __str__(self):
         return "{} ({}) sponsorship of {}".format(
             self.name, self.entity_type, self.bill

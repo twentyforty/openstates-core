@@ -105,10 +105,11 @@ class BillImporter(BaseImporter):
             if sponsor.get("person_id"):
                 filter = {
                     "pseudo_person_id": sponsor["person_id"],
-                    "legislatve_session": session,
+                    "legislative_session": session,
                     "chamber_id": sponsor.get("chamber_id"),
                 }
-                sponsor["person_id"] = self.resolve_person(**filter)
+                person_id = self.resolve_person(**filter)
+                sponsor["person_id"] = person_id
                 sponsor["scraped_name_match_id"] = self.resolve_scraped_name_match_id(
                     **filter
                 )

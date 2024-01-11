@@ -40,7 +40,8 @@ class RunPlan(models.Model):
             jurisdiction_id = ""
         else:
             jurisdiction_id = " - " + jurisdiction_id.split("/")[-2]
-        return f"{self.pk}{jurisdiction_id} - {self.start_time.strftime('%Y-%m-%d %H:%M:%S')} - {self.success}"
+        start_time = self.start_time.strftime("%Y-%m-%d %H:%M:%S") if self.start_time else ""
+        return f"{self.pk}{jurisdiction_id} - {start_time} - {self.success}"
 
 class ScrapeReport(models.Model):
     plan = models.ForeignKey(RunPlan, related_name="scrapers", on_delete=models.CASCADE)
