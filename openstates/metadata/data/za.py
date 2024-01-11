@@ -173,6 +173,6 @@ ZA = State(
                 "ocd-division/country:za/province:wc",
                 10,
             ),
-        ]
+        ],
     ),
 )

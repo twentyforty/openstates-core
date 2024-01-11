@@ -48,7 +48,7 @@ def _cleanup(text: str) -> str:
 
 
 def download(
-    version: dict[str, str]
+    version: dict[str, str],
 ) -> tuple[typing.Optional[str], typing.Optional[bytes]]:
     abbr = jid_to_abbr(version["jurisdiction_id"])
     ext = MIMETYPES[version["media_type"]]

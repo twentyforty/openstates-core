@@ -4,7 +4,6 @@ from django.core.exceptions import ValidationError
 
 
 def test_division_subtypes_from_id():
-
     # simplest case
     assert Division.subtypes_from_id("ocd-division/country:us") == (
         {"country": "us"},

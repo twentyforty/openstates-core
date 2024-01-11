@@ -172,12 +172,15 @@ class BaseImporter:
         pass
 
     def resolve_bill(self, bill_id: str, *, date: str) -> typing.Optional[_ID]:
-        bill_transform_func = settings.IMPORT_TRANSFORMERS.get("bill", {}).get("identifier", None)
+        bill_transform_func = settings.IMPORT_TRANSFORMERS.get("bill", {}).get(
+            "identifier", None
+        )
         if bill_transform_func:
             bill_id = bill_transform_func(bill_id)
 
         objects = Bill.objects.filter(
-            Q(legislative_session__end_date__gte=date) | Q(legislative_session__end_date=""),
+            Q(legislative_session__end_date__gte=date)
+            | Q(legislative_session__end_date=""),
             legislative_session__start_date__lte=date,
             legislative_session__jurisdiction_id=self.jurisdiction_id,
             identifier=bill_id,
@@ -189,10 +192,14 @@ class BaseImporter:
         elif len(ids) == 0:
             self.error(f"could not resolve bill id {bill_id} {date}, no matches")
         else:
-            self.error(f"could not resolve bill id {bill_id} {date}, {len(ids)} matches")
+            self.error(
+                f"could not resolve bill id {bill_id} {date}, {len(ids)} matches"
+            )
         return None
 
-    def resolve_json_id(self, json_id: str, allow_no_match: bool = False) -> typing.Optional[_ID]:
+    def resolve_json_id(
+        self, json_id: str, allow_no_match: bool = False
+    ) -> typing.Optional[_ID]:
         """
         Given an id found in scraped JSON, return a DB id for the object.
 
@@ -422,7 +429,9 @@ class BaseImporter:
                 new_items = []
                 # build a list of keyfields to existing database objects
                 keylist = self.merge_related[field]
-                keyed_dbitems = {tuple(getattr(item, k) for k in keylist): item for item in dbitems}
+                keyed_dbitems = {
+                    tuple(getattr(item, k) for k in keylist): item for item in dbitems
+                }
 
                 # go through 'new' items
                 #   if item with the same keyfields exists:
@@ -443,7 +452,9 @@ class BaseImporter:
                             if subsubfield_dict and subsubfield_dict[2].get(fname):
                                 # if field has related items
                                 updated_fields.extend(
-                                    self._update_related(dbitem, {fname: val}, subsubfield_dict[2])
+                                    self._update_related(
+                                        dbitem, {fname: val}, subsubfield_dict[2]
+                                    )
                                 )
                             else:
                                 if getattr(dbitem, fname) != val:
@@ -464,9 +475,13 @@ class BaseImporter:
                 # default to doing nothing
                 do_delete = do_update = False
 
-                if items and dbitems_count:  # we have items, so does db, check for conflict
+                if (
+                    items and dbitems_count
+                ):  # we have items, so does db, check for conflict
                     do_delete = do_update = do_items_differ
-                elif items and not dbitems_count:  # we have items, db doesn't, just update
+                elif (
+                    items and not dbitems_count
+                ):  # we have items, db doesn't, just update
                     do_update = True
                 elif not items and dbitems_count:  # db has items, we don't, just delete
                     do_delete = True
@@ -513,13 +528,17 @@ class BaseImporter:
                     subobjects.append(Subtype(**item))
                     all_subrelated.append(subrelated)
                 except Exception as e:
-                    raise DataImportError("{} while importing {} as {}".format(e, item, Subtype))
+                    raise DataImportError(
+                        "{} while importing {} as {}".format(e, item, Subtype)
+                    )
 
             # add all subobjects at once (really great for actions & votes)
             try:
                 Subtype.objects.bulk_create(subobjects)
             except Exception as e:
-                raise DataImportError("{} while importing {} as {}".format(e, subobjects, Subtype))
+                raise DataImportError(
+                    "{} while importing {} as {}".format(e, subobjects, Subtype)
+                )
 
             # after import the subobjects, import their subsubobjects
             for subobj, subrel in zip(subobjects, all_subrelated):
@@ -563,7 +582,9 @@ class BaseImporter:
         legislative_session: typing.Optional[LegislativeSession] = None,
         chamber_id: typing.Optional[str] = None,
     ) -> typing.Optional[str]:
-        legislative_session_id = str(legislative_session.id) if legislative_session else None
+        legislative_session_id = (
+            str(legislative_session.id) if legislative_session else None
+        )
         cache_key = (pseudo_person_id, legislative_session_id, chamber_id)
         if cache_key in self.person_cache:
             return self.person_cache[cache_key]
@@ -574,7 +595,9 @@ class BaseImporter:
 
         if list(spec.keys()) == ["name"]:
             # if we're just resolving on name, include other names and family name
-            spec = Q(name__iexact=scraped_name_value) | Q(family_name__iexact=scraped_name_value)
+            spec = Q(name__iexact=scraped_name_value) | Q(
+                family_name__iexact=scraped_name_value
+            )
         else:
             spec = Q(**spec)
 
@@ -618,7 +641,9 @@ class BaseImporter:
                 errmsg = "no scraped name matches for spec {}".format(spec)
             else:
                 errmsg = "pseudo_person_id: '{}' with spec: '{}' yields multiple scraped name matches: '{}'".format(
-                    pseudo_person_id, spec, str([snm.matched_person for snm in scraped_name_matches])
+                    pseudo_person_id,
+                    spec,
+                    str([snm.matched_person for snm in scraped_name_matches]),
                 )
         else:
             if matched_persons.count() == 0:

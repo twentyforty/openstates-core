@@ -1,7 +1,7 @@
 import datetime
 
 from django.db import models
-from django.db.models import Q, QuerySet, constraints
+from django.db.models import Q, QuerySet
 
 from .base import OCDBase, LinkBase, OCDIDField, RelatedBase, IdentifierBase
 from .division import Division
@@ -114,7 +114,9 @@ class Post(OCDBase):
 
     def __str__(self):
         return "{} - {} - {}".format(
-            self.role, self.label, self.organization, self.division.name
+            self.role,
+            self.label,
+            self.organization,
         )
 
 

@@ -79,20 +79,20 @@ def print_report(report: Report) -> None:
 
 @transaction.atomic
 def save_report(report: Report, run_plan_model=None) -> Any:
-
     from openstates.data.models import (
         RunPlan,
         ScrapeObjects,
         ScrapeReport,
     )
     from openstates.data.models.reports import ImportObjects
+
     run_plan_model: RunPlan = run_plan_model
 
     if not run_plan_model:
         run_plan_model = RunPlan.objects.create(
             jurisdiction_id=report.jurisdiction_id,
             legislative_session=report.legislative_session,
-            start_time=report.start
+            start_time=report.start,
         )
     else:
         run_plan_model.success = report.success
@@ -141,9 +141,7 @@ def save_report(report: Report, run_plan_model=None) -> Any:
     return run_plan_model
 
 
-def _simple_count(
-    ModelClass: Model, legislatve_session: Any, **filter
-) -> int:
+def _simple_count(ModelClass: Model, legislatve_session: Any, **filter) -> int:
     return (
         ModelClass.objects.filter(legislative_session=legislatve_session)
         .filter(**filter)
@@ -154,7 +152,6 @@ def _simple_count(
 def generate_session_data_quality_report(
     legislative_session: Any, run_plan: Any = None
 ) -> Any:
-    
     from openstates.data.models import (
         Bill,
         VoteEvent,
@@ -163,7 +160,6 @@ def generate_session_data_quality_report(
         BillSponsorship,
         SessionDataQualityReport,
     )
-
 
     report = SessionDataQualityReport(
         legislative_session=legislative_session,

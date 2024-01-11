@@ -5,8 +5,8 @@ from dotenv import load_dotenv
 import google.cloud.logging
 import google.cloud.secretmanager_v1 as secretmanager
 
+
 def load():
-    
     project_id = os.environ["GOOGLE_CLOUD_PROJECT"]
     if "GOOGLE_APPLICATION_CREDENTIALS" not in os.environ:
         # Pull secrets from Secret Manager

@@ -86,7 +86,6 @@ def do_scrape(
     scraper_args_by_name: dict[str, dict[str, str]],
     bill_scrape_reports: dict[str, ScraperReport] = {},
 ) -> dict[str, ScraperReport]:
-
     scraper_reports: dict[str, ScraperReport] = {}
 
     for scraper_name, scraper_args in scraper_args_by_name.items():
@@ -135,7 +134,7 @@ def do_import(
         "events": [event_importer],
         "votes": [vote_event_importer],
     }
-    
+
     importers: dict[BaseImporter, str] = {}
     for scraper in from_scrapers:
         for importer in importers_per_scraper[scraper]:
@@ -283,14 +282,20 @@ def do_update(
 
             if legislative_session:
                 has_votes_scraper = state.scrapers.get("votes") is not None
-                _set_attempted_scrape_at(legislative_session, scraper_name, report.start)
+                _set_attempted_scrape_at(
+                    legislative_session, scraper_name, report.start
+                )
                 if scraper_name == "bills" and not has_votes_scraper:
                     _set_attempted_scrape_at(legislative_session, "votes", report.start)
 
                 if report.success:
-                    _set_successful_scrape_at(legislative_session, scraper_name, report.end)
+                    _set_successful_scrape_at(
+                        legislative_session, scraper_name, report.end
+                    )
                     if scraper_name == "bills" and not has_votes_scraper:
-                        _set_successful_scrape_at(legislative_session, "votes", report.end)
+                        _set_successful_scrape_at(
+                            legislative_session, "votes", report.end
+                        )
 
                 legislative_session.save()
 

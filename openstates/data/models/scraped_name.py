@@ -1,5 +1,5 @@
 from django.db import models, transaction
-from django.db.models import Q, CheckConstraint, UniqueConstraint
+from django.db.models import Q, UniqueConstraint
 from django.utils import timezone
 from openstates.data.models.jurisdiction import LegislativeSession
 from openstates.data.models.people_orgs import Organization, Person
@@ -43,6 +43,7 @@ class ScrapedNameMatch(models.Model):
     )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField()
+
     class Meta:
         constraints = [
             UniqueConstraint(
@@ -55,7 +56,6 @@ class ScrapedNameMatch(models.Model):
                 condition=Q(matched_chamber__isnull=True),
                 name="match_unique_without_chamber",
             ),
-            
             # CheckConstraint(
             #     check=Q(matched_person__isnull=False, matched_organization__isnull=True)
             #     | Q(matched_person__isnull=True, matched_organization__isnull=False),
@@ -138,7 +138,7 @@ class ScrapedNameUnresolvedMatch(models.Model):
             self.save()
 
             updated_at = timezone.now()
-            
+
             return ScrapedNameMatch.objects.update_or_create(
                 matched_person=option.person,
                 matched_chamber=self.chamber,
@@ -196,7 +196,8 @@ class ScrapedNameUnresolvedMatchOption(models.Model):
         )
         constraints = [
             models.CheckConstraint(
-                check=models.Q(person__isnull=False) | models.Q(organization__isnull=False),
+                check=models.Q(person__isnull=False)
+                | models.Q(organization__isnull=False),
                 name="unresolved_match_option_membership_xor_organization",
             )
         ]

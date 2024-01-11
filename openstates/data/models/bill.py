@@ -1,4 +1,3 @@
-from datetime import datetime
 from django.db import models
 from django.contrib.postgres.fields import ArrayField
 from django.contrib.postgres.search import SearchVectorField
@@ -178,6 +177,7 @@ class BillSponsorship(RelatedEntityBase):
         # unresolve match if it goes away
         on_delete=models.SET_NULL,
     )
+
     def __str__(self):
         return "{} ({}) sponsorship of {}".format(
             self.name, self.entity_type, self.bill

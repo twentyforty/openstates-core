@@ -23,7 +23,7 @@ class VoteEvent(BaseModel, SourceMixin):
         bill_chamber=None,
         bill_action=None,
         organization=None,
-        chamber=None
+        chamber=None,
     ):
         super(VoteEvent, self).__init__()
 

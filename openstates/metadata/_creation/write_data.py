@@ -88,7 +88,6 @@ if __name__ == "__main__":
             org_ids[org["jurisdiction_id"]][org["classification"]] = org["id"]
 
     for state in us.STATES + [us.states.lookup("PR")]:
-
         obj = settings[state.abbr.lower()]
         j = jurisdictions_by_name[state.name]
 

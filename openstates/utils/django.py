@@ -6,6 +6,7 @@ import dj_database_url  # type: ignore
 
 SETTINGS_PATH = os.path.dirname(os.path.dirname(__file__))
 
+
 def init_django() -> None:  # pragma: no cover
     DATABASE_URL = os.environ.get(
         "DATABASE_URL", "postgis://openstates:openstates@localhost/openstates"

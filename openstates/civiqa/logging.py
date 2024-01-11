@@ -8,6 +8,7 @@ py_label_to_level = {"NOTICE": 25, "ALERT": 70, "EMERGENCY": 80}
 py_level_to_label = {v: k for k, v in py_label_to_level.items()}
 py_level_to_severity = {25: 300, 70: 700, 80: 800}
 
+
 #
 def google_cloud_client(credentials=None):
     """

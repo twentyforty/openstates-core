@@ -92,7 +92,9 @@ def test_create_chamber_duplicate_with_changes():
     # second call, but lower chamber name has been changed
     nc.lower.name = "Ronald McDonald House of Clowns"
     with pytest.raises(IntegrityError):
-        create_chamber(juris, leg, nc.lower, "NC")  # unsupported, should definitely be loud
+        create_chamber(
+            juris, leg, nc.lower, "NC"
+        )  # unsupported, should definitely be loud
 
     assert Organization.objects.filter(classification="lower").count() == 1
 
