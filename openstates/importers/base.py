@@ -595,8 +595,10 @@ class BaseImporter:
 
         if list(spec.keys()) == ["name"]:
             # if we're just resolving on name, include other names and family name
-            spec = Q(name__iexact=scraped_name_value) | Q(
-                family_name__iexact=scraped_name_value
+            spec = (
+                Q(name__iexact=scraped_name_value)
+                | Q(family_name__iexact=scraped_name_value)
+                | Q(other_names__name__iexact=scraped_name_value)
             )
         else:
             spec = Q(**spec)
