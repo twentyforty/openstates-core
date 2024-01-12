@@ -260,6 +260,7 @@ def do_update(
                         legislative_session,
                         args,
                         report.plan.scraper_args_by_name,
+                        bill_scrape_reports,
                     )
                     if "bills" in report.scraper_reports:
                         bill_scrape_reports[
