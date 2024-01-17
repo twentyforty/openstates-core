@@ -46,3 +46,9 @@ from .reports import (
     ImportObjects,
     SessionDataQualityReport,
 )
+from .scraped_name import (
+    ScrapedNameMatch,
+    ScrapedNameUnresolvedMatch,
+    ScrapedNameMatchResolution,
+    ScrapedNameUnresolvedMatchOption,
+)
