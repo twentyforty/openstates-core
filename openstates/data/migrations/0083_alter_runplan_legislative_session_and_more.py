@@ -5,7 +5,6 @@ import django.db.models.deletion
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
         ("data", "0082_alter_scrapednamematch_legislative_session"),
     ]

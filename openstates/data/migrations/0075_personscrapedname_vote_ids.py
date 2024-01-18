@@ -4,7 +4,6 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
         ("data", "0074_rename_report_importobjects_plan_and_more"),
     ]

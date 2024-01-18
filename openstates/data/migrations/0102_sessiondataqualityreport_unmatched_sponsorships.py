@@ -4,7 +4,6 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
         ("data", "0101_alter_runplan_end_time_alter_runplan_start_time_and_more"),
     ]

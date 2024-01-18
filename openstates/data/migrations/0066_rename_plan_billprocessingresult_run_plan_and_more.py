@@ -5,7 +5,6 @@ import django.db.models.deletion
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
         ("data", "0065_remove_billprocessingresult_legislative_session_and_more"),
     ]

@@ -4,7 +4,6 @@ from django.db import migrations
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
         ("data", "0085_scrapednameunresolvedmatch_and_more"),
     ]

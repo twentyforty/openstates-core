@@ -4,7 +4,6 @@ from django.db import migrations
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
         ("data", "0094_alter_personvote_scraped_name_match_id"),
     ]

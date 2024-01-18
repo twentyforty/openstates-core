@@ -4,7 +4,6 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
         ("data", "0083_alter_runplan_legislative_session_and_more"),
     ]

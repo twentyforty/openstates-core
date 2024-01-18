@@ -4,7 +4,6 @@ from django.db import migrations
 
 
 class Migration(migrations.Migration):
-
     dependencies = [("data", "0012_person_current_role")]
 
     operations = [migrations.RemoveField(model_name="person", name="current_state")]

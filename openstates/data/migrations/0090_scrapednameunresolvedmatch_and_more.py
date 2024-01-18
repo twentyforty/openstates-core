@@ -6,7 +6,6 @@ import uuid
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
         ("data", "0089_alter_scrapednameunresolvedmatch_unique_together_and_more"),
     ]

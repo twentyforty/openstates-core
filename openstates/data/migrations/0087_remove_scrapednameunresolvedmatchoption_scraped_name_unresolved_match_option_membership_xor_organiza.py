@@ -4,7 +4,6 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
         ("data", "0086_alter_scrapednameunresolvedmatchoption_unique_together"),
     ]

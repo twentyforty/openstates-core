@@ -6,7 +6,6 @@ import uuid
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
         ("data", "0070_sessiondataqualityreport_created_at"),
     ]

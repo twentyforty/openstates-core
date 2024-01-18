@@ -4,7 +4,6 @@ from django.db import migrations
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
         ("data", "0097_remove_othername_personname_xor_orgname_and_more"),
     ]

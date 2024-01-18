@@ -4,7 +4,6 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
         ("data", "0076_rename_personscrapedname_personscrapednamematch_and_more"),
     ]

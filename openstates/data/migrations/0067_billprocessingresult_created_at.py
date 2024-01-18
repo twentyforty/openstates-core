@@ -5,7 +5,6 @@ import django.utils.timezone
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
         ("data", "0066_rename_plan_billprocessingresult_run_plan_and_more"),
     ]

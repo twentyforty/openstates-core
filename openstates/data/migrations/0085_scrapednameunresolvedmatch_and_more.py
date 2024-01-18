@@ -6,7 +6,6 @@ import uuid
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
         ("data", "0084_alter_runplan_end_time_alter_runplan_start_time"),
     ]
@@ -18,7 +17,10 @@ class Migration(migrations.Migration):
                 (
                     "id",
                     models.UUIDField(
-                        default=uuid.uuid4, editable=False, primary_key=True, serialize=False
+                        default=uuid.uuid4,
+                        editable=False,
+                        primary_key=True,
+                        serialize=False,
                     ),
                 ),
                 ("value", models.CharField(db_index=True, max_length=300)),
@@ -35,7 +37,10 @@ class Migration(migrations.Migration):
                 (
                     "id",
                     models.UUIDField(
-                        default=uuid.uuid4, editable=False, primary_key=True, serialize=False
+                        default=uuid.uuid4,
+                        editable=False,
+                        primary_key=True,
+                        serialize=False,
                     ),
                 ),
                 ("score", models.FloatField(default=None, null=True)),
@@ -121,7 +126,9 @@ class Migration(migrations.Migration):
             model_name="scrapednameunresolvedmatchoption",
             constraint=models.CheckConstraint(
                 check=models.Q(
-                    ("membership__isnull", False), ("organization__isnull", False), _connector="OR"
+                    ("membership__isnull", False),
+                    ("organization__isnull", False),
+                    _connector="OR",
                 ),
                 name="scraped_name_unresolved_match_option_membership_xor_organization",
             ),

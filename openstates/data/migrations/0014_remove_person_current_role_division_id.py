@@ -4,7 +4,6 @@ from django.db import migrations
 
 
 class Migration(migrations.Migration):
-
     dependencies = [("data", "0013_remove_person_current_state")]
 
     operations = [

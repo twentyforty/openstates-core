@@ -5,7 +5,6 @@ import django.db.models.deletion
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
         ("data", "0078_rename_personscrapednamematch_scrapednamematch_and_more"),
     ]

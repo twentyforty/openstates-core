@@ -5,7 +5,6 @@ import django.db.models.deletion
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
         ("data", "0081_alter_scrapednamematch_unique_together_and_more"),
     ]
