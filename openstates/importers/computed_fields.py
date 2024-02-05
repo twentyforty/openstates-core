@@ -17,16 +17,17 @@ def update_bill_fields(bill: Model, *, save: bool = False) -> None:
     # iterate over according to order
     # first action date will use first by order (<)
     # latest will use latest by order (>=)
-    for action in bill.actions.order_by("date", "order"):
-        if not first_action_date or action.date < first_action_date:
-            first_action_date = action.date
-        if not latest_action_date or action.date >= latest_action_date:
-            latest_action_date = action.date
-            latest_action_description = action.description
-        if "passage" in action.classification and (
-            not latest_passage_date or action.date >= latest_passage_date
-        ):
-            latest_passage_date = action.date
+    actions = bill.actions.order_by("date", "order")
+    if actions:
+        first_action = actions.first()
+        latest_action = actions.last()
+        passage_action = actions.filter(classification__in="passage").last()
+        first_action_date = first_action.date
+        latest_action_date = latest_action.date
+        latest_action_description = latest_action.description
+
+        if passage_action:
+            latest_passage_date = passage_action.date
 
     if (
         bill.first_action_date != first_action_date
