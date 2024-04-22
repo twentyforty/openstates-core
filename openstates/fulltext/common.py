@@ -1,7 +1,7 @@
 import typing
 import re
 import tempfile
-import textract  # type: ignore
+# import textract  # type: ignore
 
 from .utils import (
     pdfdata_to_text,
@@ -133,7 +133,8 @@ def textract_extractor(**kwargs: str) -> ExtractorFunc:
         with tempfile.NamedTemporaryFile(delete=False) as tmpf:
             tmpf.write(data)
             tmpf.flush()
-            return textract.process(tmpf.name, **kwargs).decode()
+            
+            # return textract.process(tmpf.name, **kwargs).decode()
 
     return func
 
