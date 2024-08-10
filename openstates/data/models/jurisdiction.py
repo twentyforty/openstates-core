@@ -64,6 +64,9 @@ class LegislativeSession(RelatedBase):
     end_date = models.CharField(max_length=10)  # YYYY[-MM[-DD]]
     active = models.BooleanField(default=False)
 
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
     last_attempted_bills_scrape_at = models.DateTimeField(null=True)
     last_successful_bills_scrape_at = models.DateTimeField(null=True)
     last_attempted_votes_scrape_at = models.DateTimeField(null=True)

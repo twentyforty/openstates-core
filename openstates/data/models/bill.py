@@ -189,7 +189,7 @@ class BillSponsorship(RelatedEntityBase):
 
 class BillDocument(RelatedBase):
     bill = models.ForeignKey(Bill, related_name="documents", on_delete=models.CASCADE)
-    note = models.CharField(max_length=3000)
+    note = models.TextField()
     date = models.CharField(max_length=10)  # YYYY[-MM[-DD]]
     classification = models.CharField(
         max_length=100, choices=common.BILL_DOCUMENT_CHOICES, blank=True
@@ -205,7 +205,7 @@ class BillDocument(RelatedBase):
 
 class BillVersion(RelatedBase):
     bill = models.ForeignKey(Bill, related_name="versions", on_delete=models.CASCADE)
-    note = models.CharField(max_length=3000)
+    note = models.TextField()
     date = models.CharField(max_length=10)  # YYYY[-MM[-DD]]
     classification = models.CharField(
         max_length=100, choices=common.BILL_VERSION_CHOICES, blank=True
